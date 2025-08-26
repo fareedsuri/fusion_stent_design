@@ -57,7 +57,8 @@ last_used_values = {
     'use_fold_lock_table': True,
     'balloon_wall_um': 16,              # Pebax wall thickness in µm
     'body_gap_mm': 0.160,               # interior/body gap if table is used
-    'draw_fold_lock_limits': True,      # draw short horizontal segments in specified crown boxes
+    # draw short horizontal segments in specified crown boxes
+    'draw_fold_lock_limits': True,
     'fold_lock_columns': '0,2,4,6'      # crown boxes used by end links
 }
 
@@ -120,33 +121,43 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     description_input.isFullWidth = True
 
     # Dimensions
-    diameter_group = inputs.addGroupCommandInput('diameter_group', 'Stent Dimensions')
+    diameter_group = inputs.addGroupCommandInput(
+        'diameter_group', 'Stent Dimensions')
     diameter_group.isExpanded = True
     diameter_inputs = diameter_group.children
 
     defaultLengthUnits = app.activeProduct.unitsManager.defaultLengthUnits
-    diameter_value = adsk.core.ValueInput.createByReal(last_used_values['diameter'])
-    diameter_input = diameter_inputs.addValueInput('diameter', 'Diameter (mm)', defaultLengthUnits, diameter_value)
+    diameter_value = adsk.core.ValueInput.createByReal(
+        last_used_values['diameter'])
+    diameter_input = diameter_inputs.addValueInput(
+        'diameter', 'Diameter (mm)', defaultLengthUnits, diameter_value)
     diameter_input.tooltip = 'Expanded stent outer diameter'
 
-    length_value = adsk.core.ValueInput.createByReal(last_used_values['length'])
-    length_input = diameter_inputs.addValueInput('length', 'Length (mm)', defaultLengthUnits, length_value)
+    length_value = adsk.core.ValueInput.createByReal(
+        last_used_values['length'])
+    length_input = diameter_inputs.addValueInput(
+        'length', 'Length (mm)', defaultLengthUnits, length_value)
     length_input.tooltip = 'Total axial length of the stent (unrolled height)'
 
     # Ring configuration
-    ring_group = inputs.addGroupCommandInput('ring_group', 'Ring Configuration')
+    ring_group = inputs.addGroupCommandInput(
+        'ring_group', 'Ring Configuration')
     ring_group.isExpanded = True
     ring_inputs = ring_group.children
 
-    num_rings_input = ring_inputs.addIntegerSpinnerCommandInput('num_rings', 'Number of Rings', 1, 50, 1, last_used_values['num_rings'])
-    crowns_input = ring_inputs.addIntegerSpinnerCommandInput('crowns_per_ring', 'Crowns per Ring', 4, 64, 1, last_used_values['crowns_per_ring'])
+    num_rings_input = ring_inputs.addIntegerSpinnerCommandInput(
+        'num_rings', 'Number of Rings', 1, 50, 1, last_used_values['num_rings'])
+    crowns_input = ring_inputs.addIntegerSpinnerCommandInput(
+        'crowns_per_ring', 'Crowns per Ring', 4, 64, 1, last_used_values['crowns_per_ring'])
 
     # Height proportions
-    height_group = inputs.addGroupCommandInput('height_group', 'Ring Height Proportions')
+    height_group = inputs.addGroupCommandInput(
+        'height_group', 'Ring Height Proportions')
     height_group.isExpanded = True
     height_inputs = height_group.children
 
-    height_factors_input = height_inputs.addStringValueInput('height_factors', 'Height Proportions (comma-separated)', last_used_values['height_factors'])
+    height_factors_input = height_inputs.addStringValueInput(
+        'height_factors', 'Height Proportions (comma-separated)', last_used_values['height_factors'])
     height_factors_input.tooltip = 'Relative proportions for each ring height (e.g., 1.20, 1.00, …). They are scaled so rings+gaps exactly fit the total length.'
     height_factors_input.isFullWidth = True
 
@@ -155,29 +166,38 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     gap_group.isExpanded = True
     gap_inputs = gap_group.children
 
-    gap_input = gap_inputs.addStringValueInput('gap_between_rings', 'Gap Between Rings (mm)', last_used_values['gap_between_rings'])
+    gap_input = gap_inputs.addStringValueInput(
+        'gap_between_rings', 'Gap Between Rings (mm)', last_used_values['gap_between_rings'])
     gap_input.tooltip = 'Apex‑to‑apex link distances for each interface (mm). Single value applies to all gaps.'
     gap_input.isFullWidth = True
 
     # Fold‑lock options
-    fl_group = inputs.addGroupCommandInput('fl_group', 'Fold‑Lock Options (Ends Only)')
+    fl_group = inputs.addGroupCommandInput(
+        'fl_group', 'Fold‑Lock Options (Ends Only)')
     fl_group.isExpanded = True
     fl_inputs = fl_group.children
 
-    use_fl_input = fl_inputs.addBoolValueInput('use_fold_lock_table', 'Use Fold‑Lock Table for End Gaps', True, '', last_used_values['use_fold_lock_table'])
+    use_fl_input = fl_inputs.addBoolValueInput(
+        'use_fold_lock_table', 'Use Fold‑Lock Table for End Gaps', True, '', last_used_values['use_fold_lock_table'])
     use_fl_input.tooltip = 'Override the first and last gaps with table‑based fold‑lock values from balloon wall thickness.'
 
-    wall_input = fl_inputs.addIntegerSpinnerCommandInput('balloon_wall_um', 'Balloon Wall Thickness (µm)', 8, 40, 1, last_used_values['balloon_wall_um'])
+    wall_input = fl_inputs.addIntegerSpinnerCommandInput(
+        'balloon_wall_um', 'Balloon Wall Thickness (µm)', 8, 40, 1, last_used_values['balloon_wall_um'])
     wall_input.tooltip = 'Pebax wall thickness in micrometers for the stent zone.'
 
-    body_gap_value = adsk.core.ValueInput.createByReal(last_used_values['body_gap_mm'] / 10.0)  # cm in Fusion; value stored in mm
-    body_gap_input = fl_inputs.addValueInput('body_gap_mm', 'Interior Body Gap (mm)', defaultLengthUnits, body_gap_value)
+    body_gap_value = adsk.core.ValueInput.createByReal(
+        # cm in Fusion; value stored in mm
+        last_used_values['body_gap_mm'] / 10.0)
+    body_gap_input = fl_inputs.addValueInput(
+        'body_gap_mm', 'Interior Body Gap (mm)', defaultLengthUnits, body_gap_value)
     body_gap_input.tooltip = 'Interior (2–3, 3–4, …) apex‑to‑apex gap used when fold‑lock table is applied to the two ends.'
 
-    draw_fl_limits_input = fl_inputs.addBoolValueInput('draw_fold_lock_limits', 'Draw Fold‑Lock Limit Lines in Crown Boxes', True, '', last_used_values['draw_fold_lock_limits'])
+    draw_fl_limits_input = fl_inputs.addBoolValueInput(
+        'draw_fold_lock_limits', 'Draw Fold‑Lock Limit Lines in Crown Boxes', True, '', last_used_values['draw_fold_lock_limits'])
     draw_fl_limits_input.tooltip = 'Short horizontal lines at the top & bottom of the end gaps, drawn only in specified crown columns (boxes).'
 
-    fl_cols_input = fl_inputs.addStringValueInput('fold_lock_columns', 'Fold‑Lock Crown Boxes (indices)', last_used_values['fold_lock_columns'])
+    fl_cols_input = fl_inputs.addStringValueInput(
+        'fold_lock_columns', 'Fold‑Lock Crown Boxes (indices)', last_used_values['fold_lock_columns'])
     fl_cols_input.tooltip = 'Comma‑separated crown indices for the end‑interface links (e.g., "0,2,4,6" for 8 crowns).'
     fl_cols_input.isFullWidth = True
 
@@ -186,32 +206,49 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     draw_group.isExpanded = True
     draw_inputs = draw_group.children
 
-    border_input = draw_inputs.addBoolValueInput('draw_border', 'Draw Border', True, '', last_used_values['draw_border'])
-    gap_lines_input = draw_inputs.addBoolValueInput('draw_gap_centerlines', 'Draw Gap Center Lines', True, '', last_used_values['draw_gap_centerlines'])
-    gap_lines_only_mid_input = draw_inputs.addBoolValueInput('gap_centerlines_interior_only', 'Gap Center Lines — Interior Only', True, '', last_used_values['gap_centerlines_interior_only'])
+    border_input = draw_inputs.addBoolValueInput(
+        'draw_border', 'Draw Border', True, '', last_used_values['draw_border'])
+    gap_lines_input = draw_inputs.addBoolValueInput(
+        'draw_gap_centerlines', 'Draw Gap Center Lines', True, '', last_used_values['draw_gap_centerlines'])
+    gap_lines_only_mid_input = draw_inputs.addBoolValueInput(
+        'gap_centerlines_interior_only', 'Gap Center Lines — Interior Only', True, '', last_used_values['gap_centerlines_interior_only'])
 
-    peak_lines_input = draw_inputs.addBoolValueInput('draw_crown_peaks', 'Draw Crown Peak Lines', True, '', last_used_values['draw_crown_peaks'])
-    wave_lines_input = draw_inputs.addBoolValueInput('draw_crown_waves', 'Draw Crown Wave Lines', True, '', last_used_values['draw_crown_waves'])
-    midlines_input = draw_inputs.addBoolValueInput('draw_crown_midlines', 'Draw Crown Wave Midlines', True, '', last_used_values['draw_crown_midlines'])
-    h_midlines_input = draw_inputs.addBoolValueInput('draw_crown_h_midlines', 'Draw Crown Horizontal Midlines', True, '', last_used_values['draw_crown_h_midlines'])
-    partial_midlines_input = draw_inputs.addIntegerSpinnerCommandInput('partial_crown_midlines', 'Crown Midlines Count (from left)', 0, 64, 1, last_used_values['partial_crown_midlines'])
-    quarter_lines_input = draw_inputs.addBoolValueInput('draw_crown_quarters', 'Draw Crown Quarter Lines', True, '', last_used_values['draw_crown_quarters'])
-    partial_quarters_input = draw_inputs.addIntegerSpinnerCommandInput('partial_crown_quarters', 'Crown Quarter Lines Count (from left)', 0, 64, 1, last_used_values['partial_crown_quarters'])
-    coincident_points_input = draw_inputs.addBoolValueInput('create_coincident_points', 'Create Coincident Points at Line Crossings', True, '', last_used_values['create_coincident_points'])
+    peak_lines_input = draw_inputs.addBoolValueInput(
+        'draw_crown_peaks', 'Draw Crown Peak Lines', True, '', last_used_values['draw_crown_peaks'])
+    wave_lines_input = draw_inputs.addBoolValueInput(
+        'draw_crown_waves', 'Draw Crown Wave Lines', True, '', last_used_values['draw_crown_waves'])
+    midlines_input = draw_inputs.addBoolValueInput(
+        'draw_crown_midlines', 'Draw Crown Wave Midlines', True, '', last_used_values['draw_crown_midlines'])
+    h_midlines_input = draw_inputs.addBoolValueInput(
+        'draw_crown_h_midlines', 'Draw Crown Horizontal Midlines', True, '', last_used_values['draw_crown_h_midlines'])
+    partial_midlines_input = draw_inputs.addIntegerSpinnerCommandInput(
+        'partial_crown_midlines', 'Crown Midlines Count (from left)', 0, 64, 1, last_used_values['partial_crown_midlines'])
+    quarter_lines_input = draw_inputs.addBoolValueInput(
+        'draw_crown_quarters', 'Draw Crown Quarter Lines', True, '', last_used_values['draw_crown_quarters'])
+    partial_quarters_input = draw_inputs.addIntegerSpinnerCommandInput(
+        'partial_crown_quarters', 'Crown Quarter Lines Count (from left)', 0, 64, 1, last_used_values['partial_crown_quarters'])
+    coincident_points_input = draw_inputs.addBoolValueInput(
+        'create_coincident_points', 'Create Coincident Points at Line Crossings', True, '', last_used_values['create_coincident_points'])
 
     # Reset
-    reset_button = draw_inputs.addBoolValueInput('reset_to_defaults', 'Reset to Default Values', False, '', False)
+    reset_button = draw_inputs.addBoolValueInput(
+        'reset_to_defaults', 'Reset to Default Values', False, '', False)
 
     # Dialog size
     args.command.setDialogInitialSize(450, 820)
     args.command.setDialogMinimumSize(300, 480)
 
     # Events
-    futil.add_handler(args.command.execute, command_execute, local_handlers=local_handlers)
-    futil.add_handler(args.command.inputChanged, command_input_changed, local_handlers=local_handlers)
-    futil.add_handler(args.command.executePreview, command_preview, local_handlers=local_handlers)
-    futil.add_handler(args.command.validateInputs, command_validate_input, local_handlers=local_handlers)
-    futil.add_handler(args.command.destroy, command_destroy, local_handlers=local_handlers)
+    futil.add_handler(args.command.execute, command_execute,
+                      local_handlers=local_handlers)
+    futil.add_handler(args.command.inputChanged,
+                      command_input_changed, local_handlers=local_handlers)
+    futil.add_handler(args.command.executePreview,
+                      command_preview, local_handlers=local_handlers)
+    futil.add_handler(args.command.validateInputs,
+                      command_validate_input, local_handlers=local_handlers)
+    futil.add_handler(args.command.destroy, command_destroy,
+                      local_handlers=local_handlers)
 
 
 def command_execute(args: adsk.core.CommandEventArgs):
@@ -219,38 +256,60 @@ def command_execute(args: adsk.core.CommandEventArgs):
     inputs = args.command.commandInputs
 
     # Grab inputs
-    diameter_input = adsk.core.ValueCommandInput.cast(inputs.itemById('diameter'))
+    diameter_input = adsk.core.ValueCommandInput.cast(
+        inputs.itemById('diameter'))
     length_input = adsk.core.ValueCommandInput.cast(inputs.itemById('length'))
-    num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(inputs.itemById('num_rings'))
-    crowns_per_ring_input = adsk.core.IntegerSpinnerCommandInput.cast(inputs.itemById('crowns_per_ring'))
-    height_factors_input = adsk.core.StringValueCommandInput.cast(inputs.itemById('height_factors'))
-    gap_input = adsk.core.StringValueCommandInput.cast(inputs.itemById('gap_between_rings'))
+    num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
+        inputs.itemById('num_rings'))
+    crowns_per_ring_input = adsk.core.IntegerSpinnerCommandInput.cast(
+        inputs.itemById('crowns_per_ring'))
+    height_factors_input = adsk.core.StringValueCommandInput.cast(
+        inputs.itemById('height_factors'))
+    gap_input = adsk.core.StringValueCommandInput.cast(
+        inputs.itemById('gap_between_rings'))
 
-    draw_border_input = adsk.core.BoolValueCommandInput.cast(inputs.itemById('draw_border'))
-    draw_gap_centerlines_input = adsk.core.BoolValueCommandInput.cast(inputs.itemById('draw_gap_centerlines'))
-    gap_centerlines_interior_only_input = adsk.core.BoolValueCommandInput.cast(inputs.itemById('gap_centerlines_interior_only'))
-    draw_crown_peaks_input = adsk.core.BoolValueCommandInput.cast(inputs.itemById('draw_crown_peaks'))
-    draw_crown_waves_input = adsk.core.BoolValueCommandInput.cast(inputs.itemById('draw_crown_waves'))
-    draw_crown_midlines_input = adsk.core.BoolValueCommandInput.cast(inputs.itemById('draw_crown_midlines'))
-    draw_crown_h_midlines_input = adsk.core.BoolValueCommandInput.cast(inputs.itemById('draw_crown_h_midlines'))
-    partial_crown_midlines_input = adsk.core.IntegerSpinnerCommandInput.cast(inputs.itemById('partial_crown_midlines'))
-    draw_crown_quarters_input = adsk.core.BoolValueCommandInput.cast(inputs.itemById('draw_crown_quarters'))
-    partial_crown_quarters_input = adsk.core.IntegerSpinnerCommandInput.cast(inputs.itemById('partial_crown_quarters'))
-    coincident_points_input = adsk.core.BoolValueCommandInput.cast(inputs.itemById('create_coincident_points'))
+    draw_border_input = adsk.core.BoolValueCommandInput.cast(
+        inputs.itemById('draw_border'))
+    draw_gap_centerlines_input = adsk.core.BoolValueCommandInput.cast(
+        inputs.itemById('draw_gap_centerlines'))
+    gap_centerlines_interior_only_input = adsk.core.BoolValueCommandInput.cast(
+        inputs.itemById('gap_centerlines_interior_only'))
+    draw_crown_peaks_input = adsk.core.BoolValueCommandInput.cast(
+        inputs.itemById('draw_crown_peaks'))
+    draw_crown_waves_input = adsk.core.BoolValueCommandInput.cast(
+        inputs.itemById('draw_crown_waves'))
+    draw_crown_midlines_input = adsk.core.BoolValueCommandInput.cast(
+        inputs.itemById('draw_crown_midlines'))
+    draw_crown_h_midlines_input = adsk.core.BoolValueCommandInput.cast(
+        inputs.itemById('draw_crown_h_midlines'))
+    partial_crown_midlines_input = adsk.core.IntegerSpinnerCommandInput.cast(
+        inputs.itemById('partial_crown_midlines'))
+    draw_crown_quarters_input = adsk.core.BoolValueCommandInput.cast(
+        inputs.itemById('draw_crown_quarters'))
+    partial_crown_quarters_input = adsk.core.IntegerSpinnerCommandInput.cast(
+        inputs.itemById('partial_crown_quarters'))
+    coincident_points_input = adsk.core.BoolValueCommandInput.cast(
+        inputs.itemById('create_coincident_points'))
 
-    reset_button_input = adsk.core.BoolValueCommandInput.cast(inputs.itemById('reset_to_defaults'))
+    reset_button_input = adsk.core.BoolValueCommandInput.cast(
+        inputs.itemById('reset_to_defaults'))
 
     # Fold‑lock
-    use_fold_lock_table_input = adsk.core.BoolValueCommandInput.cast(inputs.itemById('use_fold_lock_table'))
-    balloon_wall_um_input = adsk.core.IntegerSpinnerCommandInput.cast(inputs.itemById('balloon_wall_um'))
-    body_gap_mm_input = adsk.core.ValueCommandInput.cast(inputs.itemById('body_gap_mm'))
-    draw_fold_lock_limits_input = adsk.core.BoolValueCommandInput.cast(inputs.itemById('draw_fold_lock_limits'))
-    fold_lock_columns_input = adsk.core.StringValueCommandInput.cast(inputs.itemById('fold_lock_columns'))
+    use_fold_lock_table_input = adsk.core.BoolValueCommandInput.cast(
+        inputs.itemById('use_fold_lock_table'))
+    balloon_wall_um_input = adsk.core.IntegerSpinnerCommandInput.cast(
+        inputs.itemById('balloon_wall_um'))
+    body_gap_mm_input = adsk.core.ValueCommandInput.cast(
+        inputs.itemById('body_gap_mm'))
+    draw_fold_lock_limits_input = adsk.core.BoolValueCommandInput.cast(
+        inputs.itemById('draw_fold_lock_limits'))
+    fold_lock_columns_input = adsk.core.StringValueCommandInput.cast(
+        inputs.itemById('fold_lock_columns'))
 
     # Reset
     if reset_button_input.value:
-        for k,v in default_values.items():
-            if k in ('diameter','length','body_gap_mm'):
+        for k, v in default_values.items():
+            if k in ('diameter', 'length', 'body_gap_mm'):
                 # value inputs are in cm in Fusion; we stored mm for body_gap_mm
                 if k == 'diameter':
                     inputs.itemById('diameter').value = v
@@ -258,7 +317,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
                     inputs.itemById('length').value = v
                 elif k == 'body_gap_mm':
                     inputs.itemById('body_gap_mm').value = v/10.0
-            elif k in ('num_rings','crowns_per_ring','balloon_wall_um','partial_crown_midlines','partial_crown_quarters'):
+            elif k in ('num_rings', 'crowns_per_ring', 'balloon_wall_um', 'partial_crown_midlines', 'partial_crown_quarters'):
                 inputs.itemById(k).value = v
             elif isinstance(v, bool):
                 inputs.itemById(k).value = v
@@ -296,7 +355,8 @@ def command_execute(args: adsk.core.CommandEventArgs):
 
     # Parse height factors
     try:
-        height_factors = [float(x.strip()) for x in height_factors_str.split(',') if x.strip()!='']
+        height_factors = [
+            float(x.strip()) for x in height_factors_str.split(',') if x.strip() != '']
         while len(height_factors) < num_rings:
             height_factors.append(1.0)
         height_factors = height_factors[:num_rings]
@@ -305,7 +365,8 @@ def command_execute(args: adsk.core.CommandEventArgs):
 
     # Parse base gaps
     try:
-        gap_values = [float(x.strip()) for x in gap_str.split(',') if x.strip()!='']
+        gap_values = [float(x.strip())
+                            for x in gap_str.split(',') if x.strip() != '']
         needed_gaps = max(1, num_rings-1)
         while len(gap_values) < needed_gaps:
             gap_values.append(gap_values[-1] if gap_values else 0.16)
@@ -315,9 +376,10 @@ def command_execute(args: adsk.core.CommandEventArgs):
 
     # Parse fold‑lock crown indices
     try:
-        fold_lock_indices = [int(x.strip()) for x in fold_lock_columns_str.split(',') if x.strip()!='']
+        fold_lock_indices = [
+            int(x.strip()) for x in fold_lock_columns_str.split(',') if x.strip() != '']
     except:
-        fold_lock_indices = [0,2,4,6]
+        fold_lock_indices = [0, 2, 4, 6]
 
     # If using fold‑lock table, override ends and interiors accordingly
     if use_fold_lock_table and (num_rings >= 2):
@@ -376,9 +438,11 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
 def command_validate_input(args: adsk.core.ValidateInputsEventArgs):
     futil.log(f'{CMD_NAME} Validate Input Event')
     inputs = args.inputs
-    diameter_input = adsk.core.ValueCommandInput.cast(inputs.itemById('diameter'))
+    diameter_input = adsk.core.ValueCommandInput.cast(
+        inputs.itemById('diameter'))
     length_input = adsk.core.ValueCommandInput.cast(inputs.itemById('length'))
-    num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(inputs.itemById('num_rings'))
+    num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
+        inputs.itemById('num_rings'))
     if (diameter_input and length_input and num_rings_input and
         diameter_input.value > 0 and length_input.value > 0 and num_rings_input.value > 0):
         args.areInputsValid = True
@@ -431,7 +495,8 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
         ui = app.userInterface
         design = adsk.fusion.Design.cast(app.activeProduct)
         if not design:
-            ui.messageBox("Please create a new design or open an existing one before running this command.", "No Design Active")
+            ui.messageBox(
+                "Please create a new design or open an existing one before running this command.", "No Design Active")
             return
 
         root = design.rootComponent
@@ -450,7 +515,8 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
         total_gap_space = sum(gap_values[:num_gaps]) if num_gaps > 0 else 0.0
         available_ring_space = max(0.0, length_mm - total_gap_space)
         original_total_ring_height = sum(ring_heights) if ring_heights else 1.0
-        ring_scale_factor = (available_ring_space / original_total_ring_height) if original_total_ring_height > 0 else 1.0
+        ring_scale_factor = (
+            available_ring_space / original_total_ring_height) if original_total_ring_height > 0 else 1.0
         scaled_ring_heights = [h * ring_scale_factor for h in ring_heights]
 
         # Ring centers
@@ -458,16 +524,19 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
         current_y = scaled_ring_heights[0] / 2.0
         ring_centers.append(current_y)
         for i in range(1, num_rings):
-            gap_value = gap_values[i-1] if (i-1) < len(gap_values) else gap_values[-1]
-            current_y += (scaled_ring_heights[i-1] / 2.0) + gap_value + (scaled_ring_heights[i] / 2.0)
+            gap_value = gap_values[i -
+                1] if (i-1) < len(gap_values) else gap_values[-1]
+            current_y += (scaled_ring_heights[i-1] / 2.0) + \
+                          gap_value + (scaled_ring_heights[i] / 2.0)
             ring_centers.append(current_y)
 
         # Boundaries (top/bottom of ring bands)
         ring_start_lines = []
-        ring_end_lines   = []
+        ring_end_lines = []
         for i, center in enumerate(ring_centers):
             ring_start_lines.append(center - scaled_ring_heights[i]/2.0)  # top
-            ring_end_lines.append(center + scaled_ring_heights[i]/2.0)    # bottom
+            ring_end_lines.append(
+                center + scaled_ring_heights[i]/2.0)    # bottom
 
         # Gap centers
         gap_centers = []
@@ -557,6 +626,7 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
         # --- Fold‑lock horizontal limit lines (ends only, inside selected crown boxes) ---
         if draw_fold_lock_limits and (num_rings >= 2) and (crowns_per_ring > 0):
             crown_spacing = width_mm / crowns_per_ring
+
             def hseg(xL_mm, xR_mm, y_mm):
                 ln = lines.addByTwoPoints(adsk.core.Point3D.create(mm_to_cm(xL_mm), mm_to_cm(y_mm), 0),
                                           adsk.core.Point3D.create(mm_to_cm(xR_mm), mm_to_cm(y_mm), 0))
@@ -564,14 +634,15 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
 
             # sanitize indices
             if fold_lock_indices is None:
-                fold_lock_indices = [0,2,4,6]
-            valid_cols = sorted({k for k in fold_lock_indices if 0 <= k < crowns_per_ring})
+                fold_lock_indices = [0, 2, 4, 6]
+            valid_cols = sorted(
+                {k for k in fold_lock_indices if 0 <= k < crowns_per_ring})
 
             # End interface y-positions
-            y_low_12  = ring_end_lines[0]             # bottom of ring 1
+            y_low_12 = ring_end_lines[0]             # bottom of ring 1
             y_high_12 = ring_start_lines[1]           # top of ring 2
-            y_low_56  = ring_end_lines[num_rings-2]   # bottom of ring N-1
-            y_high_56 = ring_start_lines[num_rings-1] # top of ring N
+            y_low_56 = ring_end_lines[num_rings-2]   # bottom of ring N-1
+            y_high_56 = ring_start_lines[num_rings-1]  # top of ring N
 
             for k in valid_cols:
                 xL = k * crown_spacing
@@ -592,13 +663,14 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                 midlines_count = crowns_per_ring if draw_crown_midlines else 0
             h_midlines_count = num_rings if draw_crown_h_midlines else 0
             if partial_crown_quarters > 0:
-                quarters_count = min(partial_crown_quarters, crowns_per_ring) * 2
+                quarters_count = min(
+                    partial_crown_quarters, crowns_per_ring) * 2
             else:
                 quarters_count = crowns_per_ring*2 if draw_crown_quarters else 0
 
             # End gaps (report)
-            g_prox = gap_values[0] if (num_rings>=2) else 0.0
-            g_dist = gap_values[-1] if (num_rings>=2) else 0.0
+            g_prox = gap_values[0] if (num_rings >= 2) else 0.0
+            g_dist = gap_values[-1] if (num_rings >= 2) else 0.0
 
             ui.messageBox(
                 'Stent frame created.\n'

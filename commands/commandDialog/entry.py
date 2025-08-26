@@ -54,9 +54,11 @@ last_used_values = {
     'use_fold_lock_table': False,
     'balloon_wall_um': 16,              # Pebax wall thickness in µm
     'body_gap_mm': 0.140,               # interior/body gap if table is used
-    'draw_fold_lock_limits': False,     # draw short horizontal segments in specified crown boxes
+    # draw short horizontal segments in specified crown boxes
+    'draw_fold_lock_limits': False,
     'fold_lock_columns': '0,2,4,6',     # crown boxes used by end links
-    'gap_centerlines_interior_only': False  # only draw interior gap lines (2–3, 3–4, 4–5)
+    # only draw interior gap lines (2–3, 3–4, 4–5)
+    'gap_centerlines_interior_only': False
 }
 
 # Default values for reset functionality
@@ -82,9 +84,11 @@ default_values = {
     'use_fold_lock_table': False,
     'balloon_wall_um': 16,              # Pebax wall thickness in µm
     'body_gap_mm': 0.140,               # interior/body gap if table is used
-    'draw_fold_lock_limits': False,     # draw short horizontal segments in specified crown boxes
+    # draw short horizontal segments in specified crown boxes
+    'draw_fold_lock_limits': False,
     'fold_lock_columns': '0,2,4,6',     # crown boxes used by end links
-    'gap_centerlines_interior_only': False  # only draw interior gap lines (2–3, 3–4, 4–5)
+    # only draw interior gap lines (2–3, 3–4, 4–5)
+    'gap_centerlines_interior_only': False
 }
 
 
@@ -272,27 +276,33 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     # Gap centerlines interior only option
     gap_lines_only_mid_input = draw_inputs.addBoolValueInput(
         'gap_centerlines_interior_only', 'Gap Center Lines — Interior Only', True, '', last_used_values['gap_centerlines_interior_only'])
-    gap_lines_only_mid_input.tooltip = 'Only draw gap centerlines for interior gaps (2–3, 3–4, 4–5), not end gaps'
+    gap_lines_only_mid_input.tooltip = 'When enabled: only draw interior gap centerlines (exclude first and last gaps). When disabled: draw ALL gap centerlines including first and last gaps.'
 
     # Fold-lock options
-    fl_group = inputs.addGroupCommandInput('fl_group', 'Fold‑Lock Options (Ends Only)')
+    fl_group = inputs.addGroupCommandInput(
+        'fl_group', 'Fold‑Lock Options (Ends Only)')
     fl_group.isExpanded = False
     fl_group.tooltip = 'Advanced options for fold‑lock end connections based on balloon wall thickness'
     fl_inputs = fl_group.children
 
-    use_fl_input = fl_inputs.addBoolValueInput('use_fold_lock_table', 'Use Fold‑Lock Table for End Gaps', True, '', last_used_values['use_fold_lock_table'])
+    use_fl_input = fl_inputs.addBoolValueInput(
+        'use_fold_lock_table', 'Use Fold‑Lock Table for End Gaps', True, '', last_used_values['use_fold_lock_table'])
     use_fl_input.tooltip = 'Override the first and last gaps with table‑based fold‑lock values from balloon wall thickness.'
 
-    wall_input = fl_inputs.addIntegerSpinnerCommandInput('balloon_wall_um', 'Balloon Wall Thickness (µm)', 8, 40, 1, last_used_values['balloon_wall_um'])
+    wall_input = fl_inputs.addIntegerSpinnerCommandInput(
+        'balloon_wall_um', 'Balloon Wall Thickness (µm)', 8, 40, 1, last_used_values['balloon_wall_um'])
     wall_input.tooltip = 'Pebax balloon wall thickness for fold‑lock gap calculation (typically 12‑20 µm)'
 
-    body_gap_input = fl_inputs.addValueInput('body_gap_mm', 'Body Gap (mm)', 'mm', adsk.core.ValueInput.createByReal(last_used_values['body_gap_mm']))
+    body_gap_input = fl_inputs.addValueInput(
+        'body_gap_mm', 'Body Gap (mm)', 'mm', adsk.core.ValueInput.createByReal(last_used_values['body_gap_mm']))
     body_gap_input.tooltip = 'Interior (2–3, 3–4, …) apex‑to‑apex gap used when fold‑lock table is applied to the two ends.'
 
-    draw_fl_limits_input = fl_inputs.addBoolValueInput('draw_fold_lock_limits', 'Draw Fold‑Lock Limit Lines in Crown Boxes', True, '', last_used_values['draw_fold_lock_limits'])
+    draw_fl_limits_input = fl_inputs.addBoolValueInput(
+        'draw_fold_lock_limits', 'Draw Fold‑Lock Limit Lines in Crown Boxes', True, '', last_used_values['draw_fold_lock_limits'])
     draw_fl_limits_input.tooltip = 'Draw short horizontal line segments at fold‑lock limits within specified crown boxes'
 
-    fl_cols_input = fl_inputs.addStringValueInput('fold_lock_columns', 'Fold‑Lock Crown Boxes (indices)', last_used_values['fold_lock_columns'])
+    fl_cols_input = fl_inputs.addStringValueInput(
+        'fold_lock_columns', 'Fold‑Lock Crown Boxes (indices)', last_used_values['fold_lock_columns'])
     fl_cols_input.tooltip = 'Comma‑separated crown box indices (0‑based) for fold‑lock limit line placement (e.g., "0,2,4,6")'
 
     # Reset button to restore default values
@@ -374,7 +384,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
         inputs.itemById('partial_crown_quarters'))
     coincident_points_input = adsk.core.BoolValueCommandInput.cast(
         inputs.itemById('create_coincident_points'))
-    
+
     # Fold-lock inputs
     gap_centerlines_interior_only_input = adsk.core.BoolValueCommandInput.cast(
         inputs.itemById('gap_centerlines_interior_only'))
@@ -388,7 +398,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
         inputs.itemById('draw_fold_lock_limits'))
     fold_lock_columns_input = adsk.core.StringValueCommandInput.cast(
         inputs.itemById('fold_lock_columns'))
-    
+
     reset_button_input = adsk.core.BoolValueCommandInput.cast(
         inputs.itemById('reset_to_defaults'))
 
@@ -438,7 +448,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
     draw_crown_quarters = draw_crown_quarters_input.value
     partial_crown_quarters = partial_crown_quarters_input.value
     create_coincident_points = coincident_points_input.value
-    
+
     # Fold-lock values
     gap_centerlines_interior_only = gap_centerlines_interior_only_input.value
     use_fold_lock_table = use_fold_lock_table_input.value
@@ -476,17 +486,17 @@ def command_execute(args: adsk.core.CommandEventArgs):
         if balloon_wall_um <= 12:
             end_gap = 0.095  # mm
         elif balloon_wall_um <= 16:
-            end_gap = 0.095  # mm  
+            end_gap = 0.095  # mm
         elif balloon_wall_um <= 20:
             end_gap = 0.100  # mm
         else:
             end_gap = 0.110  # mm
-        
+
         # Override first and last gaps
         gap_values[0] = end_gap
         if len(gap_values) > 1:
             gap_values[-1] = end_gap
-            
+
         # Set interior gaps to body_gap_mm
         for i in range(1, len(gap_values) - 1):
             gap_values[i] = body_gap_mm
@@ -697,8 +707,10 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
         # Draw gap center lines
         if draw_gap_centerlines and num_rings > 1:
             if gap_centerlines_interior_only and num_rings > 2:
-                # Only draw interior gap lines (skip first and last)
-                for gap_center in gap_centers[1:-1]:
+                # Only draw interior gap lines (skip first and last gaps)
+                # For N rings: gaps 1 to N-2 (skipping gap 0 and gap N-1)
+                interior_gap_centers = gap_centers[1:-1] if len(gap_centers) > 2 else []
+                for gap_center in interior_gap_centers:
                     line = lines.addByTwoPoints(
                         adsk.core.Point3D.create(
                             mm_to_cm(0.0), mm_to_cm(gap_center), 0),
@@ -707,7 +719,7 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                     )
                     line.isConstruction = True
             else:
-                # Draw all gap lines
+                # Draw ALL gap lines (including first and last gaps)
                 for gap_center in gap_centers:
                     line = lines.addByTwoPoints(
                         adsk.core.Point3D.create(
@@ -802,42 +814,47 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
         if draw_fold_lock_limits and fold_lock_columns:
             try:
                 # Parse fold-lock column indices
-                fold_lock_indices = [int(x.strip()) for x in fold_lock_columns.split(',') if x.strip().isdigit()]
+                fold_lock_indices = [int(x.strip()) for x in fold_lock_columns.split(
+                    ',') if x.strip().isdigit()]
                 crown_spacing = width_mm / crowns_per_ring
-                
+
                 # Calculate fold-lock limits (typically 60-70% of crown width)
                 fold_lock_fraction = 0.65  # 65% of crown width
-                
+
                 for crown_idx in fold_lock_indices:
                     if 0 <= crown_idx < crowns_per_ring:
                         # Calculate crown box boundaries
                         crown_left = crown_idx * crown_spacing
                         crown_right = (crown_idx + 1) * crown_spacing
                         crown_center = (crown_left + crown_right) / 2
-                        
+
                         # Calculate fold-lock limit positions
                         limit_offset = crown_spacing * fold_lock_fraction / 2
                         left_limit = crown_center - limit_offset
                         right_limit = crown_center + limit_offset
-                        
+
                         # Draw horizontal lines at each ring level for this crown box
                         for i in range(num_rings):
                             ring_center_y = ring_centers[i]
-                            
+
                             # Left fold-lock limit line
                             line = lines.addByTwoPoints(
-                                adsk.core.Point3D.create(mm_to_cm(left_limit), mm_to_cm(ring_center_y - 1), 0),
-                                adsk.core.Point3D.create(mm_to_cm(left_limit), mm_to_cm(ring_center_y + 1), 0)
+                                adsk.core.Point3D.create(
+                                    mm_to_cm(left_limit), mm_to_cm(ring_center_y - 1), 0),
+                                adsk.core.Point3D.create(
+                                    mm_to_cm(left_limit), mm_to_cm(ring_center_y + 1), 0)
                             )
                             line.isConstruction = True
-                            
+
                             # Right fold-lock limit line
                             line = lines.addByTwoPoints(
-                                adsk.core.Point3D.create(mm_to_cm(right_limit), mm_to_cm(ring_center_y - 1), 0),
-                                adsk.core.Point3D.create(mm_to_cm(right_limit), mm_to_cm(ring_center_y + 1), 0)
+                                adsk.core.Point3D.create(
+                                    mm_to_cm(right_limit), mm_to_cm(ring_center_y - 1), 0),
+                                adsk.core.Point3D.create(
+                                    mm_to_cm(right_limit), mm_to_cm(ring_center_y + 1), 0)
                             )
                             line.isConstruction = True
-                            
+
             except ValueError:
                 # Ignore invalid fold-lock column format
                 pass
