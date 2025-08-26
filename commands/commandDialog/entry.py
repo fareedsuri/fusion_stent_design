@@ -299,7 +299,7 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
 
     draw_fl_limits_input = fl_inputs.addBoolValueInput(
         'draw_fold_lock_limits', 'Draw Fold‑Lock Limit Lines in Crown Boxes', True, '', last_used_values['draw_fold_lock_limits'])
-    draw_fl_limits_input.tooltip = 'Draw horizontal lines within gaps at fold‑lock limits (65% of crown width) for specified crown boxes'
+    draw_fl_limits_input.tooltip = 'Draw two horizontal lines per gap (above and below gap centerline) at fold‑lock limits for specified crown boxes'
 
     fl_cols_input = fl_inputs.addStringValueInput(
         'fold_lock_columns', 'Fold‑Lock Crown Boxes (indices)', last_used_values['fold_lock_columns'])
@@ -312,7 +312,7 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
 
     # ⬅️ DIALOG BOX STARTUP WIDTH CONTROL:
     # Set the initial width and height of the dialog box
-    args.command.setDialogInitialSize(400, 800)  # Width: 500px, Height: 600px
+    args.command.setDialogInitialSize(400, 900)  # Width: 500px, Height: 600px
 
     # ⬅️ ADDITIONAL DIALOG SIZE CONTROLS:
     # Set minimum dialog size (prevents user from making it too small)
@@ -835,19 +835,32 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                         right_limit = crown_center + limit_offset
 
                         # Draw horizontal lines within the gaps for this crown box
-                        # For each gap between rings, draw horizontal fold-lock limit lines
+                        # For each gap between rings, draw horizontal fold-lock limit lines above and below gap center
                         for gap_idx in range(len(gap_centers)):
                             gap_center_y = gap_centers[gap_idx]
                             
-                            # Draw horizontal fold-lock limit line (left to right within the crown box)
+                            # Calculate offset from gap center (typically 20-30% of gap height)
+                            gap_height = gap_values[gap_idx] if gap_idx < len(gap_values) else 0.14  # Default gap if not available
+                            line_offset = gap_height * 0.25  # 25% of gap height above/below center
+                            
+                            # Draw horizontal fold-lock limit line ABOVE gap center
                             line = lines.addByTwoPoints(
                                 adsk.core.Point3D.create(
-                                    mm_to_cm(left_limit), mm_to_cm(gap_center_y), 0),
+                                    mm_to_cm(left_limit), mm_to_cm(gap_center_y - line_offset), 0),
                                 adsk.core.Point3D.create(
-                                    mm_to_cm(right_limit), mm_to_cm(gap_center_y), 0)
+                                    mm_to_cm(right_limit), mm_to_cm(gap_center_y - line_offset), 0)
                             )
                             line.isConstruction = True
-
+                            
+                            # Draw horizontal fold-lock limit line BELOW gap center
+                            line = lines.addByTwoPoints(
+                                adsk.core.Point3D.create(
+                                    mm_to_cm(left_limit), mm_to_cm(gap_center_y + line_offset), 0),
+                                adsk.core.Point3D.create(
+                                    mm_to_cm(right_limit), mm_to_cm(gap_center_y + line_offset), 0)
+                            )
+                            line.isConstruction = True
+                            
             except ValueError:
                 # Ignore invalid fold-lock column format
                 pass
