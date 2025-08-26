@@ -299,7 +299,7 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
 
     draw_fl_limits_input = fl_inputs.addBoolValueInput(
         'draw_fold_lock_limits', 'Draw Fold‑Lock Limit Lines in Crown Boxes', True, '', last_used_values['draw_fold_lock_limits'])
-    draw_fl_limits_input.tooltip = 'Draw short horizontal line segments at fold‑lock limits within specified crown boxes'
+    draw_fl_limits_input.tooltip = 'Draw horizontal lines within gaps at fold‑lock limits (65% of crown width) for specified crown boxes'
 
     fl_cols_input = fl_inputs.addStringValueInput(
         'fold_lock_columns', 'Fold‑Lock Crown Boxes (indices)', last_used_values['fold_lock_columns'])
@@ -709,7 +709,8 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
             if gap_centerlines_interior_only and num_rings > 2:
                 # Only draw interior gap lines (skip first and last gaps)
                 # For N rings: gaps 1 to N-2 (skipping gap 0 and gap N-1)
-                interior_gap_centers = gap_centers[1:-1] if len(gap_centers) > 2 else []
+                interior_gap_centers = gap_centers[1:-
+                                                   1] if len(gap_centers) > 2 else []
                 for gap_center in interior_gap_centers:
                     line = lines.addByTwoPoints(
                         adsk.core.Point3D.create(
@@ -833,25 +834,17 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                         left_limit = crown_center - limit_offset
                         right_limit = crown_center + limit_offset
 
-                        # Draw horizontal lines at each ring level for this crown box
-                        for i in range(num_rings):
-                            ring_center_y = ring_centers[i]
-
-                            # Left fold-lock limit line
+                        # Draw horizontal lines within the gaps for this crown box
+                        # For each gap between rings, draw horizontal fold-lock limit lines
+                        for gap_idx in range(len(gap_centers)):
+                            gap_center_y = gap_centers[gap_idx]
+                            
+                            # Draw horizontal fold-lock limit line (left to right within the crown box)
                             line = lines.addByTwoPoints(
                                 adsk.core.Point3D.create(
-                                    mm_to_cm(left_limit), mm_to_cm(ring_center_y - 1), 0),
+                                    mm_to_cm(left_limit), mm_to_cm(gap_center_y), 0),
                                 adsk.core.Point3D.create(
-                                    mm_to_cm(left_limit), mm_to_cm(ring_center_y + 1), 0)
-                            )
-                            line.isConstruction = True
-
-                            # Right fold-lock limit line
-                            line = lines.addByTwoPoints(
-                                adsk.core.Point3D.create(
-                                    mm_to_cm(right_limit), mm_to_cm(ring_center_y - 1), 0),
-                                adsk.core.Point3D.create(
-                                    mm_to_cm(right_limit), mm_to_cm(ring_center_y + 1), 0)
+                                    mm_to_cm(right_limit), mm_to_cm(gap_center_y), 0)
                             )
                             line.isConstruction = True
 
