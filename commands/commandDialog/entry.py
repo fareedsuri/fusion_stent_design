@@ -281,7 +281,7 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     # Fold-lock options
     fl_group = inputs.addGroupCommandInput(
         'fl_group', 'Fold‑Lock Options (Ends Only)')
-    fl_group.isExpanded = False
+    fl_group.isExpanded = True
     fl_group.tooltip = 'Advanced options for fold‑lock end connections based on balloon wall thickness'
     fl_inputs = fl_group.children
 
@@ -709,8 +709,7 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
             if gap_centerlines_interior_only and num_rings > 2:
                 # Only draw interior gap lines (skip first and last gaps)
                 # For N rings: gaps 1 to N-2 (skipping gap 0 and gap N-1)
-                interior_gap_centers = gap_centers[1:-
-                                                   1] if len(gap_centers) > 2 else []
+                interior_gap_centers = gap_centers[1:-1] if len(gap_centers) > 2 else []
                 for gap_center in interior_gap_centers:
                     line = lines.addByTwoPoints(
                         adsk.core.Point3D.create(
@@ -838,11 +837,12 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                         # For each gap between rings, draw horizontal fold-lock limit lines above and below gap center
                         for gap_idx in range(len(gap_centers)):
                             gap_center_y = gap_centers[gap_idx]
-                            
+
                             # Calculate offset from gap center (typically 20-30% of gap height)
-                            gap_height = gap_values[gap_idx] if gap_idx < len(gap_values) else 0.14  # Default gap if not available
+                            gap_height = gap_values[gap_idx] if gap_idx < len(
+                                gap_values) else 0.14  # Default gap if not available
                             line_offset = gap_height * 0.25  # 25% of gap height above/below center
-                            
+
                             # Draw horizontal fold-lock limit line ABOVE gap center
                             line = lines.addByTwoPoints(
                                 adsk.core.Point3D.create(
@@ -851,7 +851,7 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                                     mm_to_cm(right_limit), mm_to_cm(gap_center_y - line_offset), 0)
                             )
                             line.isConstruction = True
-                            
+
                             # Draw horizontal fold-lock limit line BELOW gap center
                             line = lines.addByTwoPoints(
                                 adsk.core.Point3D.create(
@@ -860,7 +860,7 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                                     mm_to_cm(right_limit), mm_to_cm(gap_center_y + line_offset), 0)
                             )
                             line.isConstruction = True
-                            
+
             except ValueError:
                 # Ignore invalid fold-lock column format
                 pass
