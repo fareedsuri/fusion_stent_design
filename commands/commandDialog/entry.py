@@ -656,29 +656,36 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
         # Draw border
         if draw_border:
             # Left border
-            lines.addByTwoPoints(
+            line = lines.addByTwoPoints(
                 adsk.core.Point3D.create(mm_to_cm(0.0), mm_to_cm(0.0), 0),
                 adsk.core.Point3D.create(
                     mm_to_cm(0.0), mm_to_cm(total_length), 0)
             )
+            line.isConstruction = True
+            
             # Right border
-            lines.addByTwoPoints(
+            line = lines.addByTwoPoints(
                 adsk.core.Point3D.create(mm_to_cm(width_mm), mm_to_cm(0.0), 0),
                 adsk.core.Point3D.create(
                     mm_to_cm(width_mm), mm_to_cm(total_length), 0)
             )
+            line.isConstruction = True
+            
             # Top border
-            lines.addByTwoPoints(
+            line = lines.addByTwoPoints(
                 adsk.core.Point3D.create(
                     mm_to_cm(0.0), mm_to_cm(total_length), 0),
                 adsk.core.Point3D.create(
                     mm_to_cm(width_mm), mm_to_cm(total_length), 0)
             )
+            line.isConstruction = True
+            
             # Bottom border
-            lines.addByTwoPoints(
+            line = lines.addByTwoPoints(
                 adsk.core.Point3D.create(mm_to_cm(0.0), mm_to_cm(0.0), 0),
                 adsk.core.Point3D.create(mm_to_cm(width_mm), mm_to_cm(0.0), 0)
             )
+            line.isConstruction = True
 
         # Draw ring start lines (crown tops) - only if inside the box
         if draw_crown_peaks:
@@ -709,7 +716,8 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
             if gap_centerlines_interior_only and num_rings > 2:
                 # Only draw interior gap lines (skip first and last gaps)
                 # For N rings: gaps 1 to N-2 (skipping gap 0 and gap N-1)
-                interior_gap_centers = gap_centers[1:-1] if len(gap_centers) > 2 else []
+                interior_gap_centers = gap_centers[1:-
+                                                   1] if len(gap_centers) > 2 else []
                 for gap_center in interior_gap_centers:
                     line = lines.addByTwoPoints(
                         adsk.core.Point3D.create(
