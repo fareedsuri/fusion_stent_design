@@ -1,8 +1,10 @@
 # Fusion 360 Stent Frame Designer
 
-A comprehensive Fusion 360 add-in for designing customizable stent frames with an intuitive form dialog interface.
+A comprehensive Fusion 360 add-in for designing parametric stent frames with clinical-grade precision and advanced CAD features.
 
-## Features
+## 🎯 Overview
+
+This add-in creates parametric 2D stent frame sketches in Fusion 360 based on clinical specifications and industry best practices. It's optimized for intracranial balloon-expandable stents but supports a wide range of configurations.
 
 ### Form Dialog Parameters
 - **Stent Dimensions**: Diameter and length settings
