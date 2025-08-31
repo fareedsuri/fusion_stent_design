@@ -1,6 +1,7 @@
 import adsk.core
 import adsk.fusion
 import os
+import math
 from ...lib import fusionAddInUtils as futil
 from ... import config
 app = adsk.core.Application.get()
@@ -33,43 +34,61 @@ local_handlers = []
 
 # Global storage for last used values (persists during Fusion session)
 last_used_values = {
-    'diameter': 0.18,  # 1.80mm diameter per recommendations
-    'length': 0.8,     # 8.000mm per recommendations
-    'num_rings': 6,    # 6 rings per recommendations
-    'crowns_per_ring': 8,  # 8 crowns/ring per recommendations
-    'height_factors': '1.20, 1.00, 1.00, 1.00, 1.00, 1.10',  # Recommended pattern
-    # g₀=0.14mm with end reductions
-    'gap_between_rings': '0.126, 0.14, 0.14, 0.14, 0.133',
+    'diameter': 1.8,
+    'length': 8,
+    'num_rings': 6,
+    'crowns_per_ring': 8,
+
+    # Rings: ends slightly taller to be “more openable”
+    'height_factors': '1.20, 1.00, 1.00, 1.00, 1.00, 1.10',
+
+    # Gaps (mm, apex‑to‑apex): fold‑lock at ends (16 µm wall), body kept larger
+    # Order: 1↔2, 2↔3, 3↔4, 4↔5, 5↔6
+    'gap_between_rings': '0.095, 0.160, 0.160, 0.160, 0.100',
+
+    # Drawing options
     'draw_border': True,
-    'draw_gap_centerlines': True,  # Recommended for CAD workflow
+    'draw_gap_centerlines': True,
     'draw_crown_peaks': True,
-    'draw_crown_waves': True,      # Essential for crown definitions
+    'draw_crown_waves': True,
     'draw_crown_midlines': False,
     'draw_crown_h_midlines': False,
     'partial_crown_midlines': 0,
     'draw_crown_quarters': False,
     'partial_crown_quarters': 0,
     'create_coincident_points': False,
-    # Fold-lock options
-    'use_fold_lock_table': False,
-    'balloon_wall_um': 16,              # Pebax wall thickness in µm
-    'body_gap_mm': 0.140,               # interior/body gap if table is used
-    # draw short horizontal segments in specified crown boxes
-    'draw_fold_lock_limits': False,
-    'fold_lock_columns': '0,2,4,6',     # crown boxes used by end links
+
+    # Fold‑lock (ends only)
+    # let UI/table override first/last gaps from wall thickness
+    'use_fold_lock_table': True,
+    'balloon_wall_um': 16,            # Pebax wall used to compute end windows
+    'balloon_material': 'Pebax',  # note only; current code doesn’t use it
+
+    # Visual guides: draw short horizontals only in end “boxes” used by links
+    'draw_fold_lock_limits': True,
+    'fold_lock_columns': '0,2,4,6',
+
+    # Interior‑only gap centerlines (hide g at start/end)
+    'gap_centerlines_interior_only': True,
+
+    # (Optional note for your workflow; current code ignores this field)
+    'per_ring_fold_lock_config': '1-2:0,2,4,6:0.095;5-6:0,2,4,6:0.100',
+
     # only draw interior gap lines (2–3, 3–4, 4–5)
     'gap_centerlines_interior_only': False
 }
 
+
 # Default values for reset functionality
 default_values = {
-    'diameter': 0.18,  # 1.80mm diameter per recommendations
-    'length': 0.8,     # 8.000mm per recommendations
-    'num_rings': 6,    # 6 rings per recommendations
-    'crowns_per_ring': 8,  # 8 crowns/ring per recommendations
+    'diameter': 1.8,
+    'length': 8,
+    'num_rings': 6,
+    'crowns_per_ring': 8,
+
     'height_factors': '1.20, 1.00, 1.00, 1.00, 1.00, 1.10',  # Recommended pattern
     # g₀=0.14mm with end reductions
-    'gap_between_rings': '0.126, 0.14, 0.14, 0.14, 0.133',
+    'gap_between_rings': '0.095, 0.160, 0.160, 0.160, 0.100',
     'draw_border': True,
     'draw_gap_centerlines': True,  # Recommended for CAD workflow
     'draw_crown_peaks': True,
@@ -82,14 +101,201 @@ default_values = {
     'create_coincident_points': False,
     # Fold-lock options
     'use_fold_lock_table': False,
-    'balloon_wall_um': 16,              # Pebax wall thickness in µm
-    'body_gap_mm': 0.140,               # interior/body gap if table is used
+    'balloon_wall_um': 16,              # balloon wall thickness in µm
+    'balloon_material': 'Pebax',        # balloon material type
     # draw short horizontal segments in specified crown boxes
-    'draw_fold_lock_limits': False,
+    'draw_fold_lock_limits': True,
     'fold_lock_columns': '0,2,4,6',     # crown boxes used by end links
+    # per-ring configuration
+    'per_ring_fold_lock_config': '1-2:0,2,4,6:0.095;5-6:0,2,4,6:0.100',
     # only draw interior gap lines (2–3, 3–4, 4–5)
     'gap_centerlines_interior_only': False
 }
+
+
+def calculate_fold_lock_gap(material, wall_thickness_um):
+    """
+    Calculate fold-lock gap based on balloon material and wall thickness.
+
+    Args:
+        material (str): Balloon material (e.g., 'Pebax', 'COC', 'Nylon', etc.)
+        wall_thickness_um (int): Wall thickness in micrometers
+
+    Returns:
+        float: Fold-lock gap in millimeters
+    """
+    # Normalize material name for case-insensitive matching
+    material = material.lower().strip()
+
+    # Material-specific fold-lock gap calculations
+    if 'pebax' in material:
+        # Pebax: Flexible, good fold characteristics
+        if wall_thickness_um <= 12:
+            return 0.095  # mm
+        elif wall_thickness_um <= 16:
+            return 0.095  # mm
+        elif wall_thickness_um <= 20:
+            return 0.100  # mm
+        else:
+            return 0.110  # mm
+
+    elif 'coc' in material or 'cyclic olefin' in material:
+        # COC: Stiffer than Pebax, needs slightly more space
+        if wall_thickness_um <= 12:
+            return 0.105  # mm - slightly larger than Pebax
+        elif wall_thickness_um <= 16:
+            return 0.105  # mm
+        elif wall_thickness_um <= 20:
+            return 0.115  # mm
+        else:
+            return 0.125  # mm
+
+    elif 'nylon' in material:
+        # Nylon: Can be stiff, needs more space for folding
+        if wall_thickness_um <= 12:
+            return 0.110  # mm
+        elif wall_thickness_um <= 16:
+            return 0.115  # mm
+        elif wall_thickness_um <= 20:
+            return 0.125  # mm
+        else:
+            return 0.135  # mm
+
+    elif 'polyurethane' in material or 'pu' in material:
+        # Polyurethane: Flexible but can be thick
+        if wall_thickness_um <= 12:
+            return 0.100  # mm
+        elif wall_thickness_um <= 16:
+            return 0.105  # mm
+        elif wall_thickness_um <= 20:
+            return 0.115  # mm
+        else:
+            return 0.125  # mm
+
+    elif 'ptfe' in material or 'teflon' in material:
+        # PTFE: Very stiff, needs significant space
+        if wall_thickness_um <= 12:
+            return 0.120  # mm
+        elif wall_thickness_um <= 16:
+            return 0.125  # mm
+        elif wall_thickness_um <= 20:
+            return 0.135  # mm
+        else:
+            return 0.150  # mm
+
+    else:
+        # Unknown/Other materials: Use conservative Pebax values
+        if wall_thickness_um <= 12:
+            return 0.095  # mm
+        elif wall_thickness_um <= 16:
+            return 0.095  # mm
+        elif wall_thickness_um <= 20:
+            return 0.100  # mm
+        else:
+            return 0.110  # mm
+
+
+# Crown arc geometry functions (fallback if module import fails)
+def crown_arc_theta_from_sagitta(h_mm, Rc_um):
+    """Solve included angle θ (deg) from sagitta h (mm) and centerline radius Rc (µm).
+    Formula: h = 2R * (1 - cos(θ/2)), so θ = 2 * acos(1 - h/(2R))
+    """
+    Rc = Rc_um / 1000.0
+    # guard rounding: ensure argument is in valid range [-1, 1]
+    c = max(-1.0, min(1.0, 1.0 - h_mm/(2.0 * Rc)))  # Added factor of 2
+    return 2.0 * math.degrees(math.acos(c))
+
+
+def sagitta_from_theta(theta_deg, Rc_um):
+    """
+    Apex sagitta h (mm) from included angle theta (deg)
+    and centerline radius Rc (micrometers).
+    Formula: s = 2R * (1 - cos(θ/2))
+    """
+    R = Rc_um / 1000.0                    # µm -> mm
+    half = math.radians(theta_deg / 2.0)
+    return 2.0 * R * (1.0 - math.cos(half))     # Fixed: removed factor of 2
+
+
+def crown_apex_from_theta(theta_deg, Rc_um):
+    """
+    Returns sagitta, chord, and arc length (all mm)
+    from included angle theta (deg) and centerline Rc (µm).
+    Returns: (h_mm, chord_mm, arc_mm)
+
+    Formulas:
+    - Arc length: L = R * θ_rad
+    - Chord length: c = 2 * R * sin(θ/2)
+    - Sagitta: s = 2R * (1 - cos(θ/2))
+    - Curvature: κ = 1/R
+    """
+    try:
+        R = Rc_um / 1000.0
+        half = math.radians(theta_deg / 2.0)
+        theta_rad = math.radians(theta_deg)
+        h = 2.0 * R * (1.0 - math.cos(half))  # Sagitta (GPT convention)
+        c = 2.0 * R * math.sin(half)    # Chord length
+        s = R * theta_rad               # Arc length
+        return h, c, s
+    except Exception as e:
+        futil.log(f'Error in crown_apex_from_theta: {str(e)}')
+        return 0, 0, 0
+
+
+def calculate_design_examples():
+    """Calculate design examples for common crown arc configurations"""
+    examples = []
+
+    # Body example: theta=72°, Rc=200 µm
+    h_body, chord_body, arc_body = crown_apex_from_theta(72.0, 200.0)
+    examples.append({
+        'name': 'Body Crown (θ=72°, Rc=200µm)',
+        'theta': 72.0,
+        'radius_um': 200.0,
+        'sagitta_mm': h_body,
+        'chord_mm': chord_body,
+        'arc_mm': arc_body
+    })
+
+    # End example: theta=90°, Rc=130 µm
+    h_end, chord_end, arc_end = crown_apex_from_theta(90.0, 130.0)
+    examples.append({
+        'name': 'End Crown (θ=90°, Rc=130µm)',
+        'theta': 90.0,
+        'radius_um': 130.0,
+        'sagitta_mm': h_end,
+        'chord_mm': chord_end,
+        'arc_mm': arc_end
+    })
+
+    return examples
+
+
+def crown_arc_chord_from_theta(theta_deg, Rc_um):
+    """Chord length (mm) for θ (deg) and Rc (µm)."""
+    Rc = Rc_um / 1000.0
+    return 2.0 * Rc * math.sin(math.radians(theta_deg)/2.0)
+
+
+def crown_arc_arc_len_from_theta(theta_deg, Rc_um):
+    """Arc length (mm) for θ (deg) and Rc (µm)."""
+    Rc = Rc_um / 1000.0
+    return math.radians(theta_deg) * Rc
+
+
+def crown_arc_curvature_from_Rc(Rc_um):
+    """Curvature κ = 1/R (1/mm) from centerline Rc (µm)."""
+    return 1.0 / (Rc_um / 1000.0)
+
+
+def crown_arc_radius_to_width_ratio(Rc_um, w_um):
+    """Rule‑of‑thumb check: Rc / strut width (dimensionless)."""
+    return Rc_um / w_um
+
+
+def crown_arc_geometric_index_w_over_Rc(w_um, Rc_um):
+    """(w/2)/Rc (dimensionless). Lower is gentler curvature."""
+    return (0.5 * w_um) / Rc_um
 
 
 # Executed when add-in is run.
@@ -157,21 +363,18 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     diameter_group.isEnabledCheckBoxDisplayed = False
     diameter_inputs = diameter_group.children
 
-    # Diameter input with wider appearance - load from saved values
-    defaultLengthUnits = app.activeProduct.unitsManager.defaultLengthUnits
-    # Convert from mm to cm for Fusion 360 internal units
-    diameter_value = adsk.core.ValueInput.createByReal(
-        last_used_values['diameter'])
+    # Diameter input - use createByString to ensure proper unit handling
+    diameter_value = adsk.core.ValueInput.createByString(
+        f'{last_used_values["diameter"]} mm')
     diameter_input = diameter_inputs.addValueInput(
-        'diameter', 'Diameter (mm)', defaultLengthUnits, diameter_value)
+        'diameter', 'Diameter (mm)', 'mm', diameter_value)
     diameter_input.tooltip = 'The outer diameter of the stent when expanded'
 
-    # Length input with wider appearance - load from saved values
-    # Convert from mm to cm for Fusion 360 internal units
-    length_value = adsk.core.ValueInput.createByReal(
-        last_used_values['length'])
+    # Length input - use createByString to ensure proper unit handling
+    length_value = adsk.core.ValueInput.createByString(
+        f'{last_used_values["length"]} mm')
     length_input = diameter_inputs.addValueInput(
-        'length', 'Length (mm)', defaultLengthUnits, length_value)
+        'length', 'Length (mm)', 'mm', length_value)
     length_input.tooltip = 'The total axial length of the stent'
 
     # Ring configuration group
@@ -191,38 +394,155 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
         'crowns_per_ring', 'Crowns per Ring', 4, 32, 1, last_used_values['crowns_per_ring'])
     crowns_input.tooltip = 'Number of crown peaks per ring segment (4-32)'
 
-    # Ring height proportions group
+    # Crown Arc Calculations group - provides suggested values based on stent geometry
+    crown_arc_group = inputs.addGroupCommandInput(
+        'crown_arc_group', 'Crown Arc Suggestions')
+    crown_arc_group.isExpanded = False  # Start collapsed
+    crown_arc_group.isEnabledCheckBoxDisplayed = False
+    crown_arc_inputs = crown_arc_group.children
+
+    # Add a note about crown arc calculations
+    crown_arc_note = crown_arc_inputs.addTextBoxCommandInput(
+        'crown_arc_note', '',
+        'Crown arc calculator: Enter theta (degrees) and radius (mm). Typical radius: 0.1-0.5 mm. Example: θ=72°, R=0.2mm → sagitta≈0.04mm',
+        3, True)
+    crown_arc_note.isFullWidth = True
+
+    # Crown Arc Radius Input (user can edit this)
+    # Default: 0.2 mm = 200 µm (typical stent crown radius)
+    initial_radius_mm = 0.2
+    crown_arc_radius_input = crown_arc_inputs.addValueInput(
+        'crown_arc_radius', 'Crown Arc Radius (mm)', 'mm',
+        adsk.core.ValueInput.createByString(f'{initial_radius_mm} mm'))
+    crown_arc_radius_input.tooltip = 'Crown arc radius in mm (typical: 0.1-0.5 mm). Example: 0.2 mm = 200 µm'
+
+    # Ring Height Input (needed for theta calculation)
+    crown_arc_height_input = crown_arc_inputs.addValueInput(
+        'crown_arc_height', 'Ring Height H (mm)', 'mm',
+        adsk.core.ValueInput.createByString('1.0 mm'))
+    crown_arc_height_input.tooltip = 'Ring height H in mm (auto-calculated from sagitta)'
+    crown_arc_height_input.tooltip = 'Ring height H for theta calculation (h = H/2 for symmetric rings)'
+
+    # Theta Input (primary input method)
+    crown_arc_theta_input = crown_arc_inputs.addValueInput(
+        'crown_arc_theta', 'Crown Arc Theta (degrees)', 'deg',
+        adsk.core.ValueInput.createByString('72.0 deg'))
+    crown_arc_theta_input.tooltip = 'Crown arc angle θ - primary input method. Common values: 60-90°. This value drives all crown arc calculations.'
+
+    # Calculated crown arc parameters (read-only, updated from theta and radius)
+    calculated_sagitta_input = crown_arc_inputs.addStringValueInput(
+        'calculated_sagitta', 'Calculated Sagitta h (mm)', '')
+    calculated_sagitta_input.isReadOnly = True
+    calculated_sagitta_input.tooltip = 'Crown arc sagitta h = H/2 for symmetric rings'
+
+    calculated_chord_input = crown_arc_inputs.addStringValueInput(
+        'calculated_chord', 'Calculated Chord (mm)', '')
+    calculated_chord_input.isReadOnly = True
+    calculated_chord_input.tooltip = 'Crown arc chord length calculated from theta and radius'
+
+    calculated_arc_length_input = crown_arc_inputs.addStringValueInput(
+        'calculated_arc_length', 'Calculated Arc Length (mm)', '')
+    calculated_arc_length_input.isReadOnly = True
+    calculated_arc_length_input.tooltip = 'Crown arc length calculated from theta and radius'
+
+    calculated_curvature_input = crown_arc_inputs.addStringValueInput(
+        'calculated_curvature', 'Calculated Curvature (1/mm)', '')
+    calculated_curvature_input.isReadOnly = True
+    calculated_curvature_input.tooltip = 'Crown arc curvature κ = 1/R'
+
+    # Add separator for rule-of-thumb checks
+    crown_arc_rule_note = crown_arc_inputs.addTextBoxCommandInput(
+        'crown_arc_rule_note', '',
+        'Rule-of-thumb design checks (assumes 75µm strut width):',
+        1, True)
+    crown_arc_rule_note.isFullWidth = True
+
+    calculated_r_over_w_input = crown_arc_inputs.addStringValueInput(
+        'calculated_r_over_w', 'R/w Ratio', '')
+    calculated_r_over_w_input.isReadOnly = True
+    calculated_r_over_w_input.tooltip = 'Radius to strut width ratio - higher is gentler (assumes 75µm strut width)'
+
+    calculated_geom_index_input = crown_arc_inputs.addStringValueInput(
+        'calculated_geom_index', 'Geometric Index (w/2)/R', '')
+    calculated_geom_index_input.isReadOnly = True
+    # Add separator for rule-of-thumb checks
+    calculated_geom_index_input.tooltip = 'Geometric strain index (w/2)/R - lower is gentler (assumes 75µm strut width)'
+    crown_arc_note2 = crown_arc_inputs.addTextBoxCommandInput(
+        'crown_arc_rule_note', '',
+        'Rule-of-thumb design checks (assumes typical strut width ~50-100 µm):',
+        1, True)
+    crown_arc_note2.isFullWidth = True
+
+    suggested_r_over_w_input = crown_arc_inputs.addStringValueInput(
+        'suggested_r_over_w', 'R/w Ratio (typical strut)', '')
+    suggested_r_over_w_input.isReadOnly = True
+    suggested_r_over_w_input.tooltip = 'Radius to strut width ratio - higher is gentler (assumes 75µm strut width)'
+
+    suggested_geom_index_input = crown_arc_inputs.addStringValueInput(
+        'suggested_geom_index', 'Geometric Index (w/2)/R', '')
+    suggested_geom_index_input.isReadOnly = True
+    suggested_geom_index_input.tooltip = 'Geometric strain index (w/2)/R - lower is gentler (assumes 75µm strut width)'
+
+    # Ring height proportions group - start collapsed (advanced feature)
     height_group = inputs.addGroupCommandInput(
         'height_group', 'Ring Height Proportions')
-    height_group.isExpanded = True
+    height_group.isExpanded = False
     height_group.isEnabledCheckBoxDisplayed = False
     height_inputs = height_group.children
 
-    # Height factors - create a wider text input - load from saved values
-    height_factors_input = height_inputs.addStringValueInput(
-        'height_factors', 'Height Proportions (comma-separated)', last_used_values['height_factors'])
-    height_factors_input.tooltip = 'Relative proportions for each ring height (e.g., 1.20, 1.00, 1.00) - automatically scaled to fit total length'
-    # ⬅️ WIDTH CONTROL: StringValueInput width properties:
-    # Makes text input span full width of group
-    height_factors_input.isFullWidth = True
+    # Default height factor control with update button - use createByString for consistency
+    default_height_input = height_inputs.addValueInput(
+        'default_height_factor', 'Default Height Factor', '',
+        adsk.core.ValueInput.createByString('1.0'))
+    default_height_input.tooltip = 'Default value to apply to all rings when Update All button is clicked'
 
-    # Gap configuration group
+    update_height_button = height_inputs.addBoolValueInput(
+        'update_all_heights', 'Update All Heights', False, '', False)
+    update_height_button.tooltip = 'Click to set all ring heights to the default value'
+
+    # Height factors table - replaces text input for better usability
+    height_factors_table = height_inputs.addTableCommandInput(
+        'height_factors_table', 'Ring Height Proportions', 2, '100:200')
+    height_factors_table.tooltip = 'Set relative proportions for each ring height - automatically scaled to fit total length'
+    height_factors_table.maximumVisibleRows = 10
+    height_factors_table.hasGrid = True
+
+    # Keep original text input hidden for data storage and backwards compatibility
+    height_factors_input = height_inputs.addStringValueInput(
+        'height_factors', 'Height Proportions (hidden)', last_used_values['height_factors'])
+    height_factors_input.isVisible = False
+
+    # Gap configuration group - start collapsed (advanced feature)
     gap_group = inputs.addGroupCommandInput('gap_group', 'Gap Configuration')
-    gap_group.isExpanded = True
+    gap_group.isExpanded = False
     gap_group.isEnabledCheckBoxDisplayed = False
     gap_inputs = gap_group.children
 
-    # Gap between rings with tooltip - load from saved values
-    # Gap values input (comma-separated list)
-    gap_input = gap_inputs.addStringValueInput(
-        'gap_between_rings', 'Gap Between Rings (mm)', last_used_values['gap_between_rings'])
-    gap_input.tooltip = 'Comma-separated gap values in mm (e.g., "0.2,0.3,0.2"). Single value applies to all gaps.'
-    # ⬅️ WIDTH CONTROL:
-    gap_input.isFullWidth = True        # Makes input span full width of group
+    # Default gap value control with update button - use createByString for proper units
+    default_gap_input = gap_inputs.addValueInput(
+        'default_gap_value', 'Default Gap Value (mm)', 'mm',
+        adsk.core.ValueInput.createByString('0.14 mm'))
+    default_gap_input.tooltip = 'Default gap value in mm to apply to all gaps when Update All button is clicked'
 
-    # Drawing options group
+    update_gap_button = gap_inputs.addBoolValueInput(
+        'update_all_gaps', 'Update All Gaps', False, '', False)
+    update_gap_button.tooltip = 'Click to set all gap values to the default value'
+
+    # Gap configuration table - replaces text input for better usability
+    gap_config_table = gap_inputs.addTableCommandInput(
+        'gap_config_table', 'Gap Between Rings', 2, '100:200')
+    gap_config_table.tooltip = 'Set gap values between rings in millimeters'
+    gap_config_table.maximumVisibleRows = 10
+    gap_config_table.hasGrid = True
+
+    # Keep original text input hidden for data storage and backwards compatibility
+    gap_input = gap_inputs.addStringValueInput(
+        'gap_between_rings', 'Gap Between Rings (hidden)', last_used_values['gap_between_rings'])
+    gap_input.isVisible = False
+
+    # Drawing options group - start collapsed (secondary options)
     draw_group = inputs.addGroupCommandInput('draw_group', 'Drawing Options')
-    draw_group.isExpanded = True
+    draw_group.isExpanded = False
     draw_group.isEnabledCheckBoxDisplayed = False
     draw_inputs = draw_group.children
 
@@ -281,29 +601,75 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     # Fold-lock options
     fl_group = inputs.addGroupCommandInput(
         'fl_group', 'Fold‑Lock Options (Ends Only)')
-    fl_group.isExpanded = True
+    fl_group.isExpanded = False
     fl_group.tooltip = 'Advanced options for fold‑lock end connections based on balloon wall thickness'
     fl_inputs = fl_group.children
 
     use_fl_input = fl_inputs.addBoolValueInput(
         'use_fold_lock_table', 'Use Fold‑Lock Table for End Gaps', True, '', last_used_values['use_fold_lock_table'])
-    use_fl_input.tooltip = 'Override the first and last gaps with table‑based fold‑lock values from balloon wall thickness.'
+    use_fl_input.tooltip = 'Override ONLY the first and last gaps with table‑based fold‑lock values from balloon wall thickness. Interior gaps are managed by the Gap Configuration table.'
 
     wall_input = fl_inputs.addIntegerSpinnerCommandInput(
         'balloon_wall_um', 'Balloon Wall Thickness (µm)', 8, 40, 1, last_used_values['balloon_wall_um'])
-    wall_input.tooltip = 'Pebax balloon wall thickness for fold‑lock gap calculation (typically 12‑20 µm)'
+    wall_input.tooltip = 'Balloon wall thickness for fold‑lock gap calculation (typically 12‑20 µm)'
 
-    body_gap_input = fl_inputs.addValueInput(
-        'body_gap_mm', 'Body Gap (mm)', 'mm', adsk.core.ValueInput.createByReal(last_used_values['body_gap_mm']))
-    body_gap_input.tooltip = 'Interior (2–3, 3–4, …) apex‑to‑apex gap used when fold‑lock table is applied to the two ends.'
+    # Try DropDownCommandInput with type ignore to bypass type checker
+    try:
+        # Use type ignore to bypass enum type checking issues
+        material_dropdown = fl_inputs.addDropDownCommandInput(
+            'balloon_material', 'Balloon Material', adsk.core.DropDownStyles.TextListDropDownStyle)  # type: ignore
+        material_items = material_dropdown.listItems
+        is_dropdown = True
+    except:
+        # Fallback to radio button group if dropdown fails
+        material_dropdown = fl_inputs.addRadioButtonGroupCommandInput(
+            'balloon_material', 'Balloon Material')
+        material_items = material_dropdown.listItems
+        is_dropdown = False
+
+    material_options = ['Pebax', 'COC', 'Nylon', 'Polyurethane', 'PTFE']
+
+    # Add material options and set selection
+    selected_index = 0  # Default to Pebax
+    try:
+        selected_index = material_options.index(
+            last_used_values['balloon_material'])
+    except:
+        pass
+
+    for i, material in enumerate(material_options):
+        if is_dropdown:
+            # For dropdown: add(name, icon, isSelected) - try different parameter order
+            item = material_items.add(material, i == selected_index, '')
+        else:
+            # For radio group: add(name, isSelected)
+            item = material_items.add(material, i == selected_index)
+
+    material_dropdown.tooltip = 'Select balloon material type - affects fold‑lock gap calculations'
 
     draw_fl_limits_input = fl_inputs.addBoolValueInput(
         'draw_fold_lock_limits', 'Draw Fold‑Lock Limit Lines in Crown Boxes', True, '', last_used_values['draw_fold_lock_limits'])
     draw_fl_limits_input.tooltip = 'Draw two horizontal lines per gap (above and below gap centerline) at fold‑lock limits for specified crown boxes'
 
-    fl_cols_input = fl_inputs.addStringValueInput(
-        'fold_lock_columns', 'Fold‑Lock Crown Boxes (indices)', last_used_values['fold_lock_columns'])
-    fl_cols_input.tooltip = 'Comma‑separated crown box indices (0‑based) for fold‑lock limit line placement (e.g., "0,2,4,6")'
+    # Default fold-lock gap value control with update button
+    # Calculate initial default based on material and wall thickness
+
+    # Text input for manual configuration (hidden when table is used)
+    fl_per_ring_config_input = fl_inputs.addStringValueInput(
+        'per_ring_fold_lock_config', 'Per-Ring Config (ring:boxes:gap_mm)', last_used_values.get('per_ring_fold_lock_config', '1:0,2,4,6:0.095;2:1,3,5,7:0.095'))
+    fl_per_ring_config_input.tooltip = 'Format: "ring:boxes:gap_mm;ring:boxes:gap_mm" (e.g., "1:0,2,4,6:0.095;2:1,3,5,7:0.095" for gap widths in mm)'
+
+    # Add a table for per-ring configuration
+    fl_per_ring_table = fl_inputs.addTableCommandInput(
+        'per_ring_table', 'Fold-Lock Gap Configuration', 4, '140:60:140:100')
+    fl_per_ring_table.tooltip = 'Configure fold-lock settings for all gaps (application depends on end-gap usage)'
+    fl_per_ring_table.maximumVisibleRows = 10
+    fl_per_ring_table.hasGrid = True
+
+    # Always show per-ring configuration table
+    fl_per_ring_table.isVisible = True
+    # Hide text input for per-ring configuration (table is primary interface)
+    fl_per_ring_config_input.isVisible = False
 
     # Reset button to restore default values
     reset_button = draw_inputs.addBoolValueInput(
@@ -311,16 +677,17 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     reset_button.tooltip = 'Click to reset all inputs to their default values'
 
     # ⬅️ DIALOG BOX STARTUP WIDTH CONTROL:
-    # Set the initial width and height of the dialog box
-    args.command.setDialogInitialSize(400, 900)  # Width: 500px, Height: 600px
+    # Set the initial width and height of the dialog box - increased for better readability
+    # Width: 500px, Height: 1000px (increased for larger font appearance)
+    args.command.setDialogInitialSize(500, 1000)
 
     # ⬅️ ADDITIONAL DIALOG SIZE CONTROLS:
     # Set minimum dialog size (prevents user from making it too small)
-    # Min Width: 400px, Min Height: 450px
-    args.command.setDialogMinimumSize(250, 450)
+    # Min Width: 450px, Min Height: 500px - increased minimums
+    args.command.setDialogMinimumSize(450, 500)
 
     # Set maximum dialog size (prevents dialog from getting too large)
-    # args.command.setDialogMaximumSize(800, 900)  # Max Width: 800px, Max Height: 900px
+    # args.command.setDialogMaximumSize(800, 1200)  # Max Width: 800px, Max Height: 1200px - may not be available in all API versions
 
     # Alternative preset sizes you can try:
     # args.command.setDialogInitialSize(400, 500)  # Smaller dialog
@@ -339,6 +706,30 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
                       command_validate_input, local_handlers=local_handlers)
     futil.add_handler(args.command.destroy, command_destroy,
                       local_handlers=local_handlers)
+
+    # Initialize the per-ring table based on checkbox state
+    try:
+        inputs = args.command.commandInputs
+        table_input = adsk.core.TableCommandInput.cast(
+            inputs.itemById('per_ring_table'))
+        config_input = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('per_ring_fold_lock_config'))
+
+        if table_input and config_input:
+            # Always show table, keep config input hidden (table is primary interface)
+            table_input.isVisible = True
+            config_input.isVisible = False
+        # Initialize height factors and gap configuration tables
+        update_height_factors_table(inputs)
+        update_gap_config_table(inputs)
+        update_fold_lock_table(inputs)
+
+        # Initialize crown arc suggestions and calculations
+        update_crown_arc_suggestions(inputs)
+
+    except Exception as e:
+        # Don't show error during initialization, just log it
+        futil.log(f"Error initializing tables: {str(e)}")
 
 
 # This event handler is called when the user clicks the OK button in the command dialog or
@@ -392,19 +783,36 @@ def command_execute(args: adsk.core.CommandEventArgs):
         inputs.itemById('use_fold_lock_table'))
     balloon_wall_um_input = adsk.core.IntegerSpinnerCommandInput.cast(
         inputs.itemById('balloon_wall_um'))
-    body_gap_mm_input = adsk.core.ValueCommandInput.cast(
-        inputs.itemById('body_gap_mm'))
+    # Try to cast as dropdown first, then fallback to radio button group
+    balloon_material_input = None
+    material_input_raw = inputs.itemById('balloon_material')
+    try:
+        # Try dropdown first
+        balloon_material_input = adsk.core.DropDownCommandInput.cast(
+            material_input_raw)
+        is_dropdown_type = True
+    except:
+        # Fallback to radio button group
+        balloon_material_input = adsk.core.RadioButtonGroupCommandInput.cast(
+            material_input_raw)
+        is_dropdown_type = False
     draw_fold_lock_limits_input = adsk.core.BoolValueCommandInput.cast(
         inputs.itemById('draw_fold_lock_limits'))
-    fold_lock_columns_input = adsk.core.StringValueCommandInput.cast(
-        inputs.itemById('fold_lock_columns'))
+    per_ring_fold_lock_config_input = adsk.core.StringValueCommandInput.cast(
+        inputs.itemById('per_ring_fold_lock_config'))
+
+    # Default value inputs for the new controls
+    default_height_input = adsk.core.ValueCommandInput.cast(
+        inputs.itemById('default_height_factor'))
+    default_gap_input = adsk.core.ValueCommandInput.cast(
+        inputs.itemById('default_gap_value'))
 
     reset_button_input = adsk.core.BoolValueCommandInput.cast(
         inputs.itemById('reset_to_defaults'))
 
     # Check if reset button was clicked
     if reset_button_input.value:
-        # Reset all values to defaults
+        # Reset all values to defaults - for value inputs, assign the numeric value directly
         diameter_input.value = default_values['diameter']
         length_input.value = default_values['length']
         num_rings_input.value = default_values['num_rings']
@@ -422,6 +830,38 @@ def command_execute(args: adsk.core.CommandEventArgs):
         partial_crown_quarters_input.value = default_values['partial_crown_quarters']
         coincident_points_input.value = default_values['create_coincident_points']
 
+        # Reset fold-lock specific inputs
+        gap_centerlines_interior_only_input.value = default_values['gap_centerlines_interior_only']
+        use_fold_lock_table_input.value = default_values['use_fold_lock_table']
+        balloon_wall_um_input.value = default_values['balloon_wall_um']
+
+        # Reset material selection (dropdown or radio button group)
+        material_options = ['Pebax', 'COC', 'Nylon', 'Polyurethane', 'PTFE']
+        try:
+            selected_index = material_options.index(
+                default_values['balloon_material'])
+        except:
+            selected_index = 0  # Default to Pebax
+
+        if is_dropdown_type:
+            # For dropdown: set selectedItem by index
+            if balloon_material_input.listItems.count > selected_index:
+                balloon_material_input.listItems.item(
+                    selected_index).isSelected = True
+        else:
+            # For radio button group: set isSelected on items
+            for i, item in enumerate(balloon_material_input.listItems):
+                item.isSelected = (i == selected_index)
+
+        draw_fold_lock_limits_input.value = default_values['draw_fold_lock_limits']
+        per_ring_fold_lock_config_input.value = default_values['per_ring_fold_lock_config']
+
+        # Reset default value inputs
+        if default_height_input:
+            default_height_input.value = 1.0  # Default height factor
+        if default_gap_input:
+            default_gap_input.value = 0.14  # Default gap value in mm
+
         # Reset the button itself
         reset_button_input.value = False
 
@@ -431,12 +871,46 @@ def command_execute(args: adsk.core.CommandEventArgs):
         return  # Exit early to just reset, don't execute
 
     # Get values
-    diameter = diameter_input.value * 10  # Convert cm to mm
-    length = length_input.value * 10      # Convert cm to mm
+    # Convert cm to mm (Fusion returns values in cm)
+    diameter = diameter_input.value * 10
+    # Convert cm to mm (Fusion returns values in cm)
+    length = length_input.value * 10
     num_rings = num_rings_input.value
     crowns_per_ring = crowns_per_ring_input.value
-    height_factors_str = height_factors_input.value
-    gap_str = gap_input.value
+
+    # Collect height factors from table
+    height_factors_list = []
+    for ring_num in range(1, num_rings + 1):
+        try:
+            factor_input = adsk.core.ValueCommandInput.cast(
+                inputs.itemById(f'height_ring_{ring_num}_factor'))
+            if factor_input:
+                height_factors_list.append(factor_input.value)
+            else:
+                height_factors_list.append(1.0)  # Default
+        except:
+            height_factors_list.append(1.0)  # Default
+
+    # Convert to string for storage (backwards compatibility)
+    height_factors_str = ', '.join([str(f) for f in height_factors_list])
+
+    # Collect gap values from table
+    gap_values_list = []
+    num_gaps = max(1, num_rings - 1)
+    for gap_num in range(1, num_gaps + 1):
+        try:
+            gap_value_input = adsk.core.ValueCommandInput.cast(
+                inputs.itemById(f'gap_{gap_num}_value'))
+            if gap_value_input:
+                # Convert cm to mm (Fusion returns values in cm)
+                gap_values_list.append(gap_value_input.value * 10)
+            else:
+                gap_values_list.append(0.14)  # Default in mm
+        except:
+            gap_values_list.append(0.14)  # Default in mm
+
+    # Convert to string for storage (backwards compatibility)
+    gap_str = ', '.join([str(g) for g in gap_values_list])
 
     draw_border = draw_border_input.value
     draw_gap_centerlines = draw_gap_centerlines_input.value
@@ -453,58 +927,62 @@ def command_execute(args: adsk.core.CommandEventArgs):
     gap_centerlines_interior_only = gap_centerlines_interior_only_input.value
     use_fold_lock_table = use_fold_lock_table_input.value
     balloon_wall_um = balloon_wall_um_input.value
-    body_gap_mm = body_gap_mm_input.value
+
+    # Get selected material from dropdown or radio button group
+    material_options = ['Pebax', 'COC', 'Nylon', 'Polyurethane', 'PTFE']
+    balloon_material = 'Pebax'  # Default
+    if balloon_material_input:
+        if is_dropdown_type:
+            # For dropdown: use selectedItem
+            if balloon_material_input.selectedItem:
+                selected_index = balloon_material_input.selectedItem.index
+                if 0 <= selected_index < len(material_options):
+                    balloon_material = material_options[selected_index]
+        else:
+            # For radio button group: find selected item
+            for i, item in enumerate(balloon_material_input.listItems):
+                if item.isSelected:
+                    balloon_material = material_options[i]
+                    break
     draw_fold_lock_limits = draw_fold_lock_limits_input.value
-    fold_lock_columns = fold_lock_columns_input.value
+    fold_lock_columns = '0,2,4,6'  # Default crown boxes for fold-lock
+    per_ring_fold_lock_config = per_ring_fold_lock_config_input.value
 
-    # Parse height factors
-    try:
-        height_factors = [float(x.strip())
-                          for x in height_factors_str.split(',')]
-        # Ensure we have the right number of factors
-        while len(height_factors) < num_rings:
-            height_factors.append(1.0)
-        height_factors = height_factors[:num_rings]
-    except:
-        height_factors = [1.0] * num_rings
+    # Always collect data from fold-lock table if visible
+    table_input = adsk.core.TableCommandInput.cast(
+        inputs.itemById('per_ring_table'))
+    if table_input and table_input.isVisible:
+        # Update the configuration string with current table data
+        update_fold_lock_config_from_table(inputs)
+        # Get the updated configuration
+        per_ring_config_input = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('per_ring_fold_lock_config'))
+        per_ring_fold_lock_config = per_ring_config_input.value if per_ring_config_input else ''
+    else:
+        per_ring_fold_lock_config = per_ring_fold_lock_config_input.value
 
-    # Parse gap values
-    try:
-        gap_values = [float(x.strip()) for x in gap_str.split(',')]
-        # Ensure we have the right number of gap values (num_rings - 1 gaps between rings)
-        needed_gaps = max(1, num_rings - 1)  # At least 1 gap value needed
-        while len(gap_values) < needed_gaps:
-            # Repeat last value or default
-            gap_values.append(gap_values[-1] if gap_values else 0.2)
-        gap_values = gap_values[:needed_gaps]
-    except:
-        gap_values = [0.2] * max(1, num_rings - 1)  # Default 0.2mm gaps
+    # Use height factors from table (already collected above)
+    height_factors = height_factors_list
+
+    # Use gap values from table (already collected above)
+    gap_values = gap_values_list
 
     # Apply fold-lock table if enabled
     if use_fold_lock_table and num_rings >= 2:
-        # Fold-lock table: tighter end gaps based on balloon wall thickness
-        if balloon_wall_um <= 12:
-            end_gap = 0.095  # mm
-        elif balloon_wall_um <= 16:
-            end_gap = 0.095  # mm
-        elif balloon_wall_um <= 20:
-            end_gap = 0.100  # mm
-        else:
-            end_gap = 0.110  # mm
+        # Calculate fold-lock gap based on balloon material and wall thickness
+        end_gap = calculate_fold_lock_gap(balloon_material, balloon_wall_um)
 
-        # Override first and last gaps
+        # Override ONLY first and last gaps (leave interior gaps as set by user in gap table)
         gap_values[0] = end_gap
         if len(gap_values) > 1:
             gap_values[-1] = end_gap
 
-        # Set interior gaps to body_gap_mm
-        for i in range(1, len(gap_values) - 1):
-            gap_values[i] = body_gap_mm
+        # Interior gaps are now managed entirely by the gap configuration table
 
     # Save current values for next session (before calling drawing function)
     last_used_values.update({
-        'diameter': diameter_input.value,
-        'length': length_input.value,
+        'diameter': diameter,  # Save the converted mm value, not the raw cm value
+        'length': length,      # Save the converted mm value, not the raw cm value
         'num_rings': num_rings,
         'crowns_per_ring': crowns_per_ring,
         'height_factors': height_factors_str,
@@ -522,9 +1000,9 @@ def command_execute(args: adsk.core.CommandEventArgs):
         'gap_centerlines_interior_only': gap_centerlines_interior_only,
         'use_fold_lock_table': use_fold_lock_table,
         'balloon_wall_um': balloon_wall_um,
-        'body_gap_mm': body_gap_mm,
+        'balloon_material': balloon_material,
         'draw_fold_lock_limits': draw_fold_lock_limits,
-        'fold_lock_columns': fold_lock_columns
+        'per_ring_fold_lock_config': per_ring_fold_lock_config
     })
 
     # Call the stent frame drawing function
@@ -532,7 +1010,8 @@ def command_execute(args: adsk.core.CommandEventArgs):
                      height_factors, gap_values, draw_border, draw_gap_centerlines, gap_centerlines_interior_only,
                      draw_crown_peaks, draw_crown_waves, draw_crown_midlines, draw_crown_h_midlines,
                      partial_crown_midlines, draw_crown_quarters, partial_crown_quarters, create_coincident_points,
-                     draw_fold_lock_limits, fold_lock_columns)
+                     draw_fold_lock_limits, fold_lock_columns, per_ring_fold_lock_config,
+                     balloon_wall_um)
 
 
 # This event handler is called when the command needs to compute a new preview in the graphics window.
@@ -552,6 +1031,1020 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
     futil.log(
         f'{CMD_NAME} Input Changed Event fired from a change to {changed_input.id}')
 
+    # Special check for crown arc inputs
+    if changed_input.id in ['crown_arc_radius', 'crown_arc_height']:
+        futil.log(f'*** CROWN ARC INPUT DETECTED: {changed_input.id} ***')
+
+    # Handle changes to balloon wall thickness or material to update default fold-lock gap
+    if changed_input.id == 'balloon_wall_um' or changed_input.id == 'balloon_material':
+        # Material/wall changes no longer need to update UI since default gap field was removed
+        pass
+
+    # Handle changes to number of rings or crowns to update table
+    elif changed_input.id in ['num_rings', 'crowns_per_ring']:
+        try:
+            command = adsk.core.Command.cast(args.firingEvent.sender)
+            all_inputs = command.commandInputs
+            table_input = adsk.core.TableCommandInput.cast(
+                all_inputs.itemById('per_ring_table'))
+
+            # Always update all tables when number of rings changes
+            # This ensures the table rows stay in sync with the number of rings setting
+            if table_input:
+                update_fold_lock_table(all_inputs)
+                # Sync the fold-lock table data back to the text configuration
+                update_fold_lock_config_from_table(all_inputs)
+
+            # Update height factors and gap configuration tables
+            update_height_factors_table(all_inputs)
+            update_gap_config_table(all_inputs)
+
+            # Update crown arc suggestions when crowns per ring changes
+            if changed_input.id == 'crowns_per_ring':
+                update_crown_arc_suggestions(all_inputs)
+
+            # Update crown arc height when number of rings changes (affects average calculation)
+            if changed_input.id == 'num_rings':
+                average_ring_height = calculate_average_ring_height(all_inputs)
+                height_input = adsk.core.ValueCommandInput.cast(
+                    all_inputs.itemById('crown_arc_height'))
+                if height_input and height_input.value <= 0.1:  # Only if still at default
+                    height_input.value = average_ring_height
+                    update_crown_arc_calculations(all_inputs)
+
+        except Exception as e:
+            app = adsk.core.Application.get()
+            ui = app.userInterface
+            ui.messageBox(
+                f"Error updating tables: {str(e)}", "Debug: Exception")
+
+    # Handle changes to diameter - update crown arc suggestions
+    elif changed_input.id == 'diameter':
+        try:
+            command = adsk.core.Command.cast(args.firingEvent.sender)
+            all_inputs = command.commandInputs
+            update_crown_arc_suggestions(all_inputs)
+        except Exception as e:
+            app = adsk.core.Application.get()
+            ui = app.userInterface
+            ui.messageBox(
+                f"Error updating crown arc suggestions: {str(e)}", "Debug: Exception")
+
+    # Handle changes to crown arc radius, height, or theta - recalculate all parameters
+    elif changed_input.id in ['crown_arc_radius', 'crown_arc_height', 'crown_arc_theta']:
+        try:
+            futil.log(f'Crown arc input changed: {changed_input.id}')
+            update_crown_arc_calculations(inputs)
+            futil.log('Crown arc calculations completed')
+        except Exception as e:
+            futil.log(f'Crown arc calculation error: {str(e)}')
+            app = adsk.core.Application.get()
+            ui = app.userInterface
+            ui.messageBox(
+                f"Error updating crown arc calculations: {str(e)}", "Debug: Exception")
+
+    # Handle changes to height factors - update crown arc height with new average
+    elif changed_input.id.startswith('height_ring_') and changed_input.id.endswith('_factor'):
+        try:
+            futil.log(f'Height factor input changed: {changed_input.id}')
+
+            # Calculate new average ring height
+            average_ring_height = calculate_average_ring_height(inputs)
+            futil.log(
+                f'Calculated average ring height: {average_ring_height:.3f}mm')
+
+            # Update crown arc height with the new average (if user hasn't manually modified it significantly)
+            height_input = adsk.core.ValueCommandInput.cast(
+                inputs.itemById('crown_arc_height'))
+            if height_input:
+                # Update if the current value is close to a calculated average (within 50% tolerance)
+                # This prevents overriding user's manual adjustments
+                current_value = height_input.value
+                futil.log(f'Current crown arc height: {current_value:.3f}mm')
+                if abs(current_value - average_ring_height) / max(average_ring_height, 0.1) < 0.5:
+                    futil.log(
+                        'Updating crown arc height with calculated average')
+                    height_input.value = average_ring_height
+                    # Trigger crown arc recalculation
+                    update_crown_arc_calculations(inputs)
+                else:
+                    futil.log(
+                        'Not updating crown arc height - user has made manual adjustments')
+
+        except Exception as e:
+            futil.log(f'Height factor calculation error: {str(e)}')
+            app = adsk.core.Application.get()
+            ui = app.userInterface
+            ui.messageBox(
+                f"Error updating crown arc height from ring heights: {str(e)}", "Debug: Exception")
+
+    # Handle changes to length - update crown arc height with new average
+    elif changed_input.id == 'length':
+        try:
+            futil.log('Length input changed')
+
+            # Calculate new average ring height based on new length
+            average_ring_height = calculate_average_ring_height(inputs)
+
+            # Update crown arc height (only if still close to calculated value)
+            height_input = adsk.core.ValueCommandInput.cast(
+                inputs.itemById('crown_arc_height'))
+            if height_input:
+                current_value = height_input.value
+                if abs(current_value - average_ring_height) / max(average_ring_height, 0.1) < 0.5:
+                    height_input.value = average_ring_height
+                    update_crown_arc_calculations(inputs)
+
+        except Exception as e:
+            app = adsk.core.Application.get()
+            ui = app.userInterface
+            ui.messageBox(
+                f"Error updating crown arc height from length change: {str(e)}", "Debug: Exception")
+
+    # Handle changes to fold-lock table inputs and sync with text configuration
+    elif changed_input.id.startswith('table_gap_') and ('_enable' in changed_input.id or '_boxes' in changed_input.id or '_gap' in changed_input.id):
+        try:
+            command = adsk.core.Command.cast(args.firingEvent.sender)
+            all_inputs = command.commandInputs
+            update_fold_lock_config_from_table(all_inputs)
+
+        except Exception as e:
+            app = adsk.core.Application.get()
+            ui = app.userInterface
+            ui.messageBox(
+                f"Error syncing fold-lock table data: {str(e)}", "Debug: Exception")
+
+    # Handle changes to height factors table inputs
+    elif changed_input.id.startswith('height_ring_') and '_factor' in changed_input.id:
+        try:
+            command = adsk.core.Command.cast(args.firingEvent.sender)
+            all_inputs = command.commandInputs
+            config_input = adsk.core.StringValueCommandInput.cast(
+                all_inputs.itemById('height_factors'))
+            num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
+                all_inputs.itemById('num_rings'))
+
+            if config_input and num_rings_input:
+                # Collect current table data and update text configuration
+                height_factors = []
+                num_rings = num_rings_input.value
+
+                for ring_num in range(1, num_rings + 1):
+                    try:
+                        factor_input = adsk.core.ValueCommandInput.cast(
+                            all_inputs.itemById(f'height_ring_{ring_num}_factor'))
+                        if factor_input:
+                            height_factors.append(str(factor_input.value))
+                    except:
+                        height_factors.append('1.0')  # Default value
+
+                # Update the text configuration
+                config_input.value = ', '.join(height_factors)
+
+        except Exception as e:
+            app = adsk.core.Application.get()
+            ui = app.userInterface
+            ui.messageBox(
+                f"Error syncing height factors: {str(e)}", "Debug: Exception")
+
+    # Handle changes to gap configuration table inputs
+    elif changed_input.id.startswith('gap_') and '_value' in changed_input.id:
+        try:
+            command = adsk.core.Command.cast(args.firingEvent.sender)
+            all_inputs = command.commandInputs
+            config_input = adsk.core.StringValueCommandInput.cast(
+                all_inputs.itemById('gap_between_rings'))
+            num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
+                all_inputs.itemById('num_rings'))
+
+            if config_input and num_rings_input:
+                # Collect current table data and update text configuration
+                gap_values = []
+                num_rings = num_rings_input.value
+                num_gaps = max(1, num_rings - 1)
+
+                for gap_num in range(1, num_gaps + 1):
+                    try:
+                        gap_input = adsk.core.ValueCommandInput.cast(
+                            all_inputs.itemById(f'gap_{gap_num}_value'))
+                        if gap_input:
+                            gap_values.append(str(gap_input.value))
+                    except:
+                        gap_values.append('0.14')  # Default value
+
+                # Update the text configuration
+                config_input.value = ', '.join(gap_values)
+
+        except Exception as e:
+            app = adsk.core.Application.get()
+            ui = app.userInterface
+            ui.messageBox(
+                f"Error syncing gap values: {str(e)}", "Debug: Exception")
+
+    # Handle update all heights button
+    elif changed_input.id == 'update_all_heights':
+        try:
+            update_button = adsk.core.BoolValueCommandInput.cast(changed_input)
+            if update_button.value:  # Button was clicked
+                command = adsk.core.Command.cast(args.firingEvent.sender)
+                all_inputs = command.commandInputs
+
+                # Get the default height value
+                default_height_input = adsk.core.ValueCommandInput.cast(
+                    all_inputs.itemById('default_height_factor'))
+                num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
+                    all_inputs.itemById('num_rings'))
+
+                if default_height_input and num_rings_input:
+                    default_value = default_height_input.value
+                    num_rings = num_rings_input.value
+
+                    # Update all height factor inputs in the table
+                    for ring_num in range(1, num_rings + 1):
+                        try:
+                            factor_input = adsk.core.ValueCommandInput.cast(
+                                all_inputs.itemById(f'height_ring_{ring_num}_factor'))
+                            if factor_input:
+                                factor_input.value = default_value
+                        except:
+                            pass  # Skip if input doesn't exist
+
+                    # Trigger update of the hidden text input
+                    update_height_factors_from_table(all_inputs)
+
+                # Reset the button
+                update_button.value = False
+
+        except Exception as e:
+            app = adsk.core.Application.get()
+            ui = app.userInterface
+            ui.messageBox(
+                f"Error updating all heights: {str(e)}", "Debug: Exception")
+
+    # Handle update all gaps button
+    elif changed_input.id == 'update_all_gaps':
+        try:
+            update_button = adsk.core.BoolValueCommandInput.cast(changed_input)
+            if update_button.value:  # Button was clicked
+                command = adsk.core.Command.cast(args.firingEvent.sender)
+                all_inputs = command.commandInputs
+
+                # Get the default gap value
+                default_gap_input = adsk.core.ValueCommandInput.cast(
+                    all_inputs.itemById('default_gap_value'))
+                num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
+                    all_inputs.itemById('num_rings'))
+
+                if default_gap_input and num_rings_input:
+                    # Convert cm to mm (Fusion returns values in cm)
+                    default_value = default_gap_input.value * 10
+                    num_rings = num_rings_input.value
+                    num_gaps = max(1, num_rings - 1)
+
+                    # Update all gap value inputs in the table
+                    for gap_num in range(1, num_gaps + 1):
+                        try:
+                            gap_input = adsk.core.ValueCommandInput.cast(
+                                all_inputs.itemById(f'gap_{gap_num}_value'))
+                            if gap_input:
+                                # Convert back to cm for Fusion's input system
+                                gap_input.value = default_value / 10
+                        except:
+                            pass  # Skip if input doesn't exist
+
+                    # Trigger update of the hidden text input
+                    update_gap_config_from_table(all_inputs)
+
+                # Reset the button
+                update_button.value = False
+
+        except Exception as e:
+            app = adsk.core.Application.get()
+            ui = app.userInterface
+            ui.messageBox(
+                f"Error updating all gaps: {str(e)}", "Debug: Exception")
+
+
+def update_per_ring_table(inputs):
+    """Update the per-ring table with current stent parameters"""
+    try:
+        # Get required inputs
+        num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
+            inputs.itemById('num_rings'))
+        crowns_input = adsk.core.IntegerSpinnerCommandInput.cast(
+            inputs.itemById('crowns_per_ring'))
+        table_input = adsk.core.TableCommandInput.cast(
+            inputs.itemById('per_ring_table'))
+        config_input = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('per_ring_fold_lock_config'))
+
+        if not all([num_rings_input, crowns_input, table_input]):
+            return
+
+        num_rings = num_rings_input.value
+        crowns_per_ring = crowns_input.value
+
+        # Parse current configuration from text input
+        ring_data = {}
+        if config_input and config_input.value:
+            try:
+                for config_part in config_input.value.split(';'):
+                    if ':' in config_part:
+                        parts = config_part.strip().split(':')
+                        if len(parts) == 3:
+                            ring_idx = int(parts[0].strip())
+                            boxes_str = parts[1].strip()
+                            gap_mm = float(parts[2].strip())
+                            ring_data[ring_idx] = {
+                                'boxes': boxes_str, 'gap_mm': gap_mm}
+            except:
+                pass  # Ignore parsing errors
+
+        # Clear existing table contents
+        table_input.clear()
+
+        # Add table headers
+        header_ring = inputs.addTextBoxCommandInput(
+            'table_header_ring', '', 'Ring', 1, True)
+        header_enable = inputs.addTextBoxCommandInput(
+            'table_header_enable', '', 'Enable', 1, True)
+        header_boxes = inputs.addTextBoxCommandInput(
+            'table_header_boxes', '', 'Crown Boxes', 1, True)
+        header_gap = inputs.addTextBoxCommandInput(
+            'table_header_gap', '', 'Gap (mm)', 1, True)
+
+        table_input.addCommandInput(header_ring, 0, 0)
+        table_input.addCommandInput(header_enable, 0, 1)
+        table_input.addCommandInput(header_boxes, 0, 2)
+        table_input.addCommandInput(header_gap, 0, 3)
+
+        # Add data rows for fold-lock rings (rings 1 through 5)
+        # Rings 1-5, but not more than total rings
+        fold_lock_rings = list(range(1, min(6, num_rings + 1)))
+
+        for idx, ring_num in enumerate(fold_lock_rings):
+            row_index = idx + 1  # Row 0 is headers
+
+            # Ring number (read-only)
+            ring_label = inputs.addTextBoxCommandInput(
+                f'table_ring_{ring_num}_label', '', str(ring_num), 1, True)
+            table_input.addCommandInput(ring_label, row_index, 0)
+
+            # Enable checkbox
+            is_enabled = ring_num in ring_data
+            enable_checkbox = inputs.addBoolValueInput(
+                f'table_ring_{ring_num}_enable', '', True, '', is_enabled)
+            enable_checkbox.tooltip = f'Enable fold-lock for ring {ring_num}'
+            table_input.addCommandInput(enable_checkbox, row_index, 1)
+
+            # Crown boxes input
+            default_boxes = ring_data.get(ring_num, {}).get('boxes', '0,2,4,6')
+            boxes_input = inputs.addStringValueInput(
+                f'table_ring_{ring_num}_boxes', '', default_boxes)
+            boxes_input.tooltip = f'Comma-separated crown box indices (0-{crowns_per_ring-1})'
+            table_input.addCommandInput(boxes_input, row_index, 2)
+
+            # Gap input - use createByString for proper unit handling
+            default_gap = ring_data.get(ring_num, {}).get('gap_mm', 0.095)
+            gap_input = inputs.addValueInput(f'table_ring_{ring_num}_gap', '', 'mm',
+                                             adsk.core.ValueInput.createByString(f'{default_gap} mm'))
+            gap_input.tooltip = 'Fold-lock gap width in millimeters'
+            table_input.addCommandInput(gap_input, row_index, 3)
+
+    except Exception as e:
+        app = adsk.core.Application.get()
+        ui = app.userInterface
+        if ui:
+            ui.messageBox(f'Error updating table: {str(e)}')
+
+
+def update_height_factors_table(inputs):
+    """Update the height factors table with current stent parameters"""
+    try:
+        # Get required inputs
+        num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
+            inputs.itemById('num_rings'))
+        table_input = adsk.core.TableCommandInput.cast(
+            inputs.itemById('height_factors_table'))
+        config_input = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('height_factors'))
+
+        if not all([num_rings_input, table_input]):
+            return
+
+        num_rings = num_rings_input.value
+
+        # Parse current configuration from text input
+        height_factors = []
+        if config_input and config_input.value:
+            try:
+                height_factors = [float(x.strip())
+                                  for x in config_input.value.split(',')]
+            except:
+                pass  # Ignore parsing errors
+
+        # Ensure we have values for all rings
+        while len(height_factors) < num_rings:
+            height_factors.append(1.0)
+        height_factors = height_factors[:num_rings]
+
+        # Clear existing table contents
+        table_input.clear()
+
+        # Add table headers
+        header_ring = inputs.addTextBoxCommandInput(
+            'height_header_ring', '', 'Ring', 1, True)
+        header_factor = inputs.addTextBoxCommandInput(
+            'height_header_factor', '', 'Height Factor', 1, True)
+
+        table_input.addCommandInput(header_ring, 0, 0)
+        table_input.addCommandInput(header_factor, 0, 1)
+
+        # Add data rows for each ring
+        for ring_num in range(1, num_rings + 1):
+            row_index = ring_num  # Row 0 is headers
+
+            # Ring number (read-only)
+            ring_label = inputs.addTextBoxCommandInput(
+                f'height_ring_{ring_num}_label', '', str(ring_num), 1, True)
+            table_input.addCommandInput(ring_label, row_index, 0)
+
+            # Height factor input - use createByString for consistency
+            default_factor = height_factors[ring_num -
+                                            1] if ring_num - 1 < len(height_factors) else 1.0
+            factor_input = inputs.addValueInput(f'height_ring_{ring_num}_factor', '', '',
+                                                adsk.core.ValueInput.createByString(f'{default_factor}'))
+            factor_input.tooltip = f'Height proportion for ring {ring_num} (relative value)'
+            table_input.addCommandInput(factor_input, row_index, 1)
+
+    except Exception as e:
+        app = adsk.core.Application.get()
+        ui = app.userInterface
+        if ui:
+            ui.messageBox(f'Error updating height factors table: {str(e)}')
+
+
+def update_gap_config_table(inputs):
+    """Update the gap configuration table with current stent parameters"""
+    try:
+        # Get required inputs
+        num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
+            inputs.itemById('num_rings'))
+        table_input = adsk.core.TableCommandInput.cast(
+            inputs.itemById('gap_config_table'))
+        config_input = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('gap_between_rings'))
+
+        if not all([num_rings_input, table_input]):
+            return
+
+        num_rings = num_rings_input.value
+        num_gaps = max(1, num_rings - 1)  # At least 1 gap needed
+
+        # Parse current configuration from text input
+        gap_values = []
+        if config_input and config_input.value:
+            try:
+                gap_values = [float(x.strip())
+                              for x in config_input.value.split(',')]
+            except:
+                pass  # Ignore parsing errors
+
+        # Ensure we have values for all gaps
+        while len(gap_values) < num_gaps:
+            gap_values.append(gap_values[-1] if gap_values else 0.14)
+        gap_values = gap_values[:num_gaps]
+
+        # Clear existing table contents
+        table_input.clear()
+
+        # Add table headers
+        header_gap = inputs.addTextBoxCommandInput(
+            'gap_header_gap', '', 'Gap Position', 1, True)
+        header_value = inputs.addTextBoxCommandInput(
+            'gap_header_value', '', 'Gap Value (mm)', 1, True)
+
+        table_input.addCommandInput(header_gap, 0, 0)
+        table_input.addCommandInput(header_value, 0, 1)
+
+        # Add data rows for each gap
+        for gap_num in range(1, num_gaps + 1):
+            row_index = gap_num  # Row 0 is headers
+
+            # Gap position (read-only)
+            gap_label = inputs.addTextBoxCommandInput(
+                f'gap_{gap_num}_label', '', f'Gap {gap_num} (Ring {gap_num} → {gap_num + 1})', 1, True)
+            table_input.addCommandInput(gap_label, row_index, 0)
+
+            # Gap value input - use createByString for proper unit handling
+            default_gap = gap_values[gap_num -
+                                     1] if gap_num - 1 < len(gap_values) else 0.14
+            gap_input = inputs.addValueInput(f'gap_{gap_num}_value', '', 'mm',
+                                             adsk.core.ValueInput.createByString(f'{default_gap} mm'))
+            gap_input.tooltip = f'Gap width between ring {gap_num} and ring {gap_num + 1} in millimeters'
+            table_input.addCommandInput(gap_input, row_index, 1)
+
+    except Exception as e:
+
+        app = adsk.core.Application.get()
+        ui = app.userInterface
+        if ui:
+            ui.messageBox(f'Error updating gap config table: {str(e)}')
+
+
+def update_fold_lock_table(inputs):
+    """Update the fold-lock table with current stent parameters"""
+    try:
+        # Get required inputs
+        num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
+            inputs.itemById('num_rings'))
+        crowns_input = adsk.core.IntegerSpinnerCommandInput.cast(
+            inputs.itemById('crowns_per_ring'))
+        table_input = adsk.core.TableCommandInput.cast(
+            inputs.itemById('per_ring_table'))
+        config_input = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('per_ring_fold_lock_config'))
+
+        if not all([num_rings_input, crowns_input, table_input]):
+            return
+
+        num_rings = num_rings_input.value
+        crowns_per_ring = crowns_input.value
+        num_gaps = max(1, num_rings - 1)  # Number of gaps between rings
+
+        # Show gaps 1-5 in the table (but limit to actual number of gaps)
+        # This allows configuration of fold-lock for the first 5 gaps
+        # Show up to 5 gaps, but not more than exist
+        # Show all gaps in the table (same as Gap Configuration table)
+        fold_lock_gaps = list(range(1, num_gaps + 1))
+
+        # Parse current configuration from text input
+        gap_data = {}
+        if config_input and config_input.value:
+            try:
+                for config_part in config_input.value.split(';'):
+                    if ':' in config_part:
+                        parts = config_part.strip().split(':')
+                        if len(parts) == 3:
+                            gap_idx = int(parts[0].strip())
+                            boxes_str = parts[1].strip()
+                            gap_mm = float(parts[2].strip())
+                            gap_data[gap_idx] = {
+                                'boxes': boxes_str, 'gap_mm': gap_mm}
+            except:
+                pass  # Ignore parsing errors
+
+        # Clear existing table contents
+        table_input.clear()
+
+        # Add table headers
+        header_gap = inputs.addTextBoxCommandInput(
+            'fold_lock_header_gap', '', 'Gap', 1, True)
+        header_enable = inputs.addTextBoxCommandInput(
+            'fold_lock_header_enable', '', 'Enable', 1, True)
+        header_boxes = inputs.addTextBoxCommandInput(
+            'fold_lock_header_boxes', '', 'Crown Boxes', 1, True)
+        header_gap_mm = inputs.addTextBoxCommandInput(
+            'fold_lock_header_gap_mm', '', 'Gap (mm)', 1, True)
+
+        table_input.addCommandInput(header_gap, 0, 0)
+        table_input.addCommandInput(header_enable, 0, 1)
+        table_input.addCommandInput(header_boxes, 0, 2)
+        table_input.addCommandInput(header_gap_mm, 0, 3)
+
+        # Add data rows for each end gap only
+        for idx, gap_num in enumerate(fold_lock_gaps):
+            row_index = idx + 1  # Row 0 is headers
+
+            # Gap position (read-only)
+            gap_label = inputs.addTextBoxCommandInput(
+                f'table_gap_{gap_num}_label', '', f'Gap {gap_num} (Ring {gap_num} → {gap_num + 1})', 1, True)
+            table_input.addCommandInput(gap_label, row_index, 0)
+
+            # Enable checkbox
+            is_enabled = gap_num in gap_data
+            enable_checkbox = inputs.addBoolValueInput(
+                f'table_gap_{gap_num}_enable', '', True, '', is_enabled)
+            enable_checkbox.tooltip = f'Enable fold-lock for gap {gap_num}'
+            table_input.addCommandInput(enable_checkbox, row_index, 1)
+
+            # Crown boxes input
+            default_boxes = gap_data.get(gap_num, {}).get('boxes', '0,2,4,6')
+            boxes_input = inputs.addStringValueInput(
+                f'table_gap_{gap_num}_boxes', '', default_boxes)
+            boxes_input.tooltip = f'Comma-separated crown box indices (0-{crowns_per_ring-1})'
+            table_input.addCommandInput(boxes_input, row_index, 2)
+
+            # Gap input - use createByString for proper unit handling
+            default_gap = gap_data.get(gap_num, {}).get('gap_mm', 0.095)
+            gap_input = inputs.addValueInput(f'table_gap_{gap_num}_gap', '', 'mm',
+                                             adsk.core.ValueInput.createByString(f'{default_gap} mm'))
+            gap_input.tooltip = 'Fold-lock gap width in millimeters'
+            table_input.addCommandInput(gap_input, row_index, 3)
+
+    except Exception as e:
+        app = adsk.core.Application.get()
+        ui = app.userInterface
+        if ui:
+            ui.messageBox(f'Error updating fold-lock table: {str(e)}')
+
+
+def update_height_factors_from_table(inputs):
+    """Update the hidden height factors text input from table data"""
+    try:
+        config_input = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('height_factors'))
+        num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
+            inputs.itemById('num_rings'))
+
+        if config_input and num_rings_input:
+            # Collect current table data and update text configuration
+            height_factors = []
+            num_rings = num_rings_input.value
+
+            for ring_num in range(1, num_rings + 1):
+                try:
+                    factor_input = adsk.core.ValueCommandInput.cast(
+                        inputs.itemById(f'height_ring_{ring_num}_factor'))
+                    if factor_input:
+                        height_factors.append(str(factor_input.value))
+                except:
+                    height_factors.append('1.0')  # Default value
+
+            # Update the text configuration
+            config_input.value = ', '.join(height_factors)
+
+    except Exception as e:
+        app = adsk.core.Application.get()
+        ui = app.userInterface
+        if ui:
+            ui.messageBox(
+                f'Error updating height factors from table: {str(e)}')
+
+
+def update_gap_config_from_table(inputs):
+    """Update the hidden gap configuration text input from table data"""
+    try:
+        config_input = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('gap_between_rings'))
+        num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
+            inputs.itemById('num_rings'))
+
+        if config_input and num_rings_input:
+            # Collect current table data and update text configuration
+            gap_values = []
+            num_rings = num_rings_input.value
+            num_gaps = max(1, num_rings - 1)
+
+            for gap_num in range(1, num_gaps + 1):
+                try:
+                    gap_input = adsk.core.ValueCommandInput.cast(
+                        inputs.itemById(f'gap_{gap_num}_value'))
+                    if gap_input:
+                        # Convert cm to mm (Fusion returns values in cm)
+                        gap_values.append(str(gap_input.value * 10))
+                except:
+                    gap_values.append('0.14')  # Default value in mm
+
+            # Update the text configuration
+            config_input.value = ', '.join(gap_values)
+
+    except Exception as e:
+        app = adsk.core.Application.get()
+        ui = app.userInterface
+        if ui:
+            ui.messageBox(f'Error updating gap config from table: {str(e)}')
+
+
+def update_fold_lock_config_from_table(inputs):
+    """Update the hidden fold-lock configuration text input from table data"""
+    try:
+        config_input = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('per_ring_fold_lock_config'))
+        num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
+            inputs.itemById('num_rings'))
+
+        if config_input and num_rings_input:
+            # Collect current table data and update text configuration
+            config_parts = []
+            num_rings = num_rings_input.value
+            num_gaps = max(1, num_rings - 1)  # Number of gaps between rings
+
+            # Collect data from all gaps (same as Gap Configuration table)
+            fold_lock_gaps = list(range(1, num_gaps + 1))
+
+            for gap_num in fold_lock_gaps:
+                try:
+                    enable_input = adsk.core.BoolValueCommandInput.cast(
+                        inputs.itemById(f'table_gap_{gap_num}_enable'))
+                    boxes_input = adsk.core.StringValueCommandInput.cast(
+                        inputs.itemById(f'table_gap_{gap_num}_boxes'))
+                    gap_input = adsk.core.ValueCommandInput.cast(
+                        inputs.itemById(f'table_gap_{gap_num}_gap'))
+
+                    if enable_input and enable_input.value and boxes_input and gap_input:
+                        boxes_str = boxes_input.value.strip()
+                        # Convert cm to mm (Fusion returns values in cm)
+                        gap_mm = gap_input.value * 10
+
+                        if boxes_str and gap_mm > 0:
+                            config_parts.append(
+                                f'{gap_num}:{boxes_str}:{gap_mm:.3f}')
+                except:
+                    pass  # Skip invalid entries
+
+            # Update the text configuration
+            config_input.value = ';'.join(config_parts)
+
+    except Exception as e:
+        app = adsk.core.Application.get()
+        ui = app.userInterface
+        if ui:
+            ui.messageBox(
+                f'Error updating fold-lock config from table: {str(e)}')
+
+
+def update_per_ring_config_from_table(inputs):
+    """Update the hidden per-ring fold-lock configuration text input from table data"""
+    # Delegate to the new cleaner function
+    update_fold_lock_config_from_table(inputs)
+
+
+def update_crown_arc_calculations(inputs):
+    """Update crown arc calculations based on user-input radius, height, or theta"""
+    try:
+        # Add debug logging
+        futil.log('Crown arc calculations updating...')
+
+        # Get user inputs
+        radius_input = adsk.core.ValueCommandInput.cast(
+            inputs.itemById('crown_arc_radius'))
+        height_input = adsk.core.ValueCommandInput.cast(
+            inputs.itemById('crown_arc_height'))
+        theta_input = adsk.core.ValueCommandInput.cast(
+            inputs.itemById('crown_arc_theta'))
+
+        if not radius_input or not height_input or not theta_input:
+            futil.log('Crown arc inputs not found')
+            return
+
+        # Debug: show the raw values from inputs
+        futil.log(f'DEBUG: radius_input.value = {radius_input.value}')
+        futil.log(
+            f'DEBUG: radius_input.expression = {radius_input.expression}')
+        futil.log(f'DEBUG: height_input.value = {height_input.value}')
+        futil.log(f'DEBUG: theta_input.value = {theta_input.value}')
+
+        # Test both conversion approaches to see which is correct
+        # This is in cm (Fusion's internal units)
+        radius_raw = radius_input.value
+        height_raw = height_input.value  # This is in cm
+        # This is in radians (Fusion's internal units)
+        theta_raw = theta_input.value
+
+        # Correct unit conversions:
+        # - Fusion returns radius in cm, we need mm
+        # - Fusion returns theta in radians, we need degrees
+        radius_mm = radius_raw * 10.0           # Convert cm to mm
+        height_mm = height_raw * 10.0           # Convert cm to mm
+        theta_deg = math.degrees(theta_raw)     # Convert radians to degrees
+        radius_um = radius_mm * 1000.0          # Convert mm to µm
+
+        futil.log(f'Corrected conversions:')
+        futil.log(
+            f'Radius: {radius_raw:.6f}cm -> {radius_mm:.6f}mm = {radius_um:.1f}µm')
+        futil.log(f'Theta: {theta_raw:.6f}rad -> {theta_deg:.1f}°')
+
+        # Always use theta-based calculation from user input
+        futil.log('Using theta-based calculation from user input')
+
+        if theta_deg <= 0 or theta_deg > 180:
+            futil.log(f'Crown arc: Invalid theta value: {theta_deg}')
+            return
+
+        if radius_mm <= 0:
+            futil.log(f'Crown arc: Invalid radius value: {radius_mm}')
+            return
+
+        futil.log(
+            f'About to call crown_apex_from_theta({theta_deg}, {radius_um})')
+        # Calculate sagitta, chord, and arc from theta and radius
+        sagitta_calculated, chord_calculated, arc_calculated = crown_apex_from_theta(
+            theta_deg, radius_um)
+        futil.log(
+            f'crown_apex_from_theta returned: sagitta={sagitta_calculated:.6f}, chord={chord_calculated:.6f}, arc={arc_calculated:.6f}')
+
+        # The sagitta is the actual crown arc height from the chord to the apex
+        # For symmetric rings, the ring height H would be 2*sagitta, but here we show the actual sagitta
+        # This updates the height field for ring calculations
+        calculated_height = 2.0 * sagitta_calculated
+
+        # Use calculated values
+        sagitta_mm = sagitta_calculated
+        chord_mm = chord_calculated
+        arc_length_mm = arc_calculated
+        height_mm = calculated_height
+
+        # Calculate remaining parameters
+        curvature = crown_arc_curvature_from_Rc(radius_um)
+
+        # Rule-of-thumb calculations (assume typical strut width of 75 µm)
+        typical_strut_width_um = 75.0
+        r_over_w = crown_arc_radius_to_width_ratio(
+            radius_um, typical_strut_width_um)
+        geom_index = crown_arc_geometric_index_w_over_Rc(
+            typical_strut_width_um, radius_um)
+
+        # Log verification
+        futil.log(
+            f'Final values: θ={theta_deg:.2f}°, h={sagitta_mm:.4f}mm, chord={chord_mm:.4f}mm, arc={arc_length_mm:.4f}mm')
+
+        # Update the calculated outputs
+        futil.log('Looking for output fields...')
+        sagitta_output = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('calculated_sagitta'))
+        futil.log(f'sagitta_output found: {sagitta_output is not None}')
+        chord_output = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('calculated_chord'))
+        futil.log(f'chord_output found: {chord_output is not None}')
+        arc_length_output = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('calculated_arc_length'))
+        futil.log(f'arc_length_output found: {arc_length_output is not None}')
+        curvature_output = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('calculated_curvature'))
+        futil.log(f'curvature_output found: {curvature_output is not None}')
+        r_over_w_output = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('calculated_r_over_w'))
+        futil.log(f'r_over_w_output found: {r_over_w_output is not None}')
+        geom_index_output = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('calculated_geom_index'))
+        futil.log(f'geom_index_output found: {geom_index_output is not None}')
+
+        if sagitta_output:
+            futil.log(f'Setting sagitta_output.value to: {sagitta_mm:.3f} mm')
+            sagitta_output.value = f"{sagitta_mm:.3f} mm"
+        else:
+            futil.log('sagitta_output is None - cannot update!')
+        if chord_output:
+            futil.log(f'Setting chord_output.value to: {chord_mm:.3f} mm')
+            chord_output.value = f"{chord_mm:.3f} mm"
+        if arc_length_output:
+            futil.log(
+                f'Setting arc_length_output.value to: {arc_length_mm:.3f} mm')
+            arc_length_output.value = f"{arc_length_mm:.3f} mm"
+        if curvature_output:
+            futil.log(
+                f'Setting curvature_output.value to: {curvature:.3f} mm⁻¹')
+            curvature_output.value = f"{curvature:.3f} mm⁻¹"
+        if r_over_w_output:
+            futil.log(
+                f'Setting r_over_w_output.value to: {r_over_w:.1f} (75µm strut)')
+            r_over_w_output.value = f"{r_over_w:.1f} (75µm strut)"
+        if geom_index_output:
+            futil.log(
+                f'Setting geom_index_output.value to: {geom_index:.4f} (75µm strut)')
+            geom_index_output.value = f"{geom_index:.4f} (75µm strut)"
+
+        futil.log('Crown arc calculations completed successfully')
+
+    except Exception as e:
+        futil.log(f'Crown arc calculation exception: {str(e)}')
+        app = adsk.core.Application.get()
+        ui = app.userInterface
+        if ui:
+            ui.messageBox(
+                f'Error updating crown arc calculations: {str(e)}')
+
+
+def calculate_average_ring_height(inputs):
+    """Calculate average ring height from form's height factors and ring count"""
+    try:
+        # Get number of rings to know how many height factors to consider
+        num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
+            inputs.itemById('num_rings'))
+        length_input = adsk.core.ValueCommandInput.cast(
+            inputs.itemById('length'))
+
+        if not num_rings_input or not length_input:
+            return 0.5  # Default if can't determine
+
+        num_rings = num_rings_input.value
+        # Convert cm to mm (Fusion returns values in cm)
+        total_length_mm = length_input.value * 10
+
+        # Get height factors from the table inputs
+        height_factors = []
+        for ring_num in range(1, num_rings + 1):
+            factor_input = adsk.core.ValueCommandInput.cast(
+                inputs.itemById(f'height_ring_{ring_num}_factor'))
+            if factor_input and factor_input.value > 0:
+                height_factors.append(factor_input.value)
+            else:
+                height_factors.append(1.0)  # Default factor
+
+        # Calculate total proportion and individual ring heights
+        if height_factors:
+            total_proportion = sum(height_factors)
+            # Calculate average ring height considering proportions
+            # Each ring gets: (its_factor / total_factors) * total_length
+            individual_heights = [(factor / total_proportion) * total_length_mm
+                                  for factor in height_factors]
+            average_height = sum(individual_heights) / len(individual_heights)
+            return average_height
+        else:
+            # Fallback: equal distribution
+            return total_length_mm / num_rings if num_rings > 0 else 0.5
+
+    except Exception:
+        return 0.5  # Default fallback
+
+
+def update_crown_arc_suggestions(inputs):
+    """Initialize crown arc radius suggestion based on stent geometry"""
+    try:
+        # Get current diameter and crowns per ring for initial suggestion
+        diameter_input = adsk.core.ValueCommandInput.cast(
+            inputs.itemById('diameter'))
+        crowns_input = adsk.core.IntegerSpinnerCommandInput.cast(
+            inputs.itemById('crowns_per_ring'))
+
+        if not diameter_input or not crowns_input:
+            return
+
+        # Convert cm to mm (Fusion returns values in cm)
+        diameter_mm = diameter_input.value * 10
+        crowns_per_ring = crowns_input.value
+
+        # Calculate average ring height from form data
+        average_ring_height = calculate_average_ring_height(inputs)
+
+        # Get design examples for reference
+        examples = calculate_design_examples()
+
+        # Calculate suggested radius based on crown spacing
+        circumference_mm = math.pi * diameter_mm
+        crown_spacing_mm = circumference_mm / crowns_per_ring
+
+        # Use design examples to inform suggestion
+        # For typical stent: aim for theta between 60-90°
+        target_theta = 72.0  # Body crown example
+        target_radius_um = 200.0  # Body crown example
+
+        # Scale the radius based on crown spacing
+        # If crown spacing is larger, use larger radius for similar curvature
+        reference_spacing = 0.7  # mm (reference crown spacing)
+        radius_scale_factor = crown_spacing_mm / reference_spacing
+        suggested_radius_um = target_radius_um * radius_scale_factor
+        suggested_radius_mm = suggested_radius_um / 1000.0
+
+        # Alternative calculation using sagitta approach
+        # Calculate what sagitta would give us for target theta
+        suggested_sagitta_mm = sagitta_from_theta(
+            target_theta, suggested_radius_um)
+
+        # Log the suggestions with examples
+        futil.log(f'Crown arc suggestions:')
+        futil.log(
+            f'  Diameter: {diameter_mm:.2f}mm, Crowns: {crowns_per_ring}')
+        futil.log(f'  Crown spacing: {crown_spacing_mm:.3f}mm')
+        futil.log(
+            f'  Suggested radius: {suggested_radius_mm:.3f}mm ({suggested_radius_um:.0f}µm)')
+        futil.log(f'  Target theta: {target_theta:.1f}°')
+        futil.log(f'  Calculated sagitta: {suggested_sagitta_mm:.4f}mm')
+
+        for example in examples:
+            futil.log(
+                f'  Example: {example["name"]} -> h={example["sagitta_mm"]:.4f}mm')
+
+        # Update the radius input with the suggestion (only if it's still at default)
+        radius_input = adsk.core.ValueCommandInput.cast(
+            inputs.itemById('crown_arc_radius'))
+        if radius_input and radius_input.value <= 0.5:  # Only update if still at default
+            radius_input.value = suggested_radius_mm
+
+        # Update crown arc height with calculated average ring height (only if at default)
+        height_input = adsk.core.ValueCommandInput.cast(
+            inputs.itemById('crown_arc_height'))
+        if height_input and height_input.value <= 0.1:  # Only update if still at default
+            height_input.value = average_ring_height
+
+        # Update theta input with target theta (only if at default)
+        theta_input = adsk.core.ValueCommandInput.cast(
+            inputs.itemById('crown_arc_theta'))
+        # Only update if still at default
+        if theta_input and (theta_input.value <= 1.0 or theta_input.value == 72.0):
+            theta_input.value = target_theta
+
+        # Trigger calculation update
+        update_crown_arc_calculations(inputs)
+
+    except Exception as e:
+        app = adsk.core.Application.get()
+        ui = app.userInterface
+        if ui:
+            ui.messageBox(
+                f'Error updating crown arc suggestions: {str(e)}')
+
 
 # This event handler is called when the user interacts with any of the inputs in the dialog
 # which allows you to verify that all of the inputs are valid and enables the OK button.
@@ -568,9 +2061,18 @@ def command_validate_input(args: adsk.core.ValidateInputsEventArgs):
     num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
         inputs.itemById('num_rings'))
 
+    # Validate balloon material if present
+    material_input = adsk.core.RadioButtonGroupCommandInput.cast(
+        inputs.itemById('balloon_material'))
+    material_valid = True
+    if material_input:
+        # Radio button groups always have a valid selection, so always valid
+        material_valid = True
+
     # Basic validation
     if (diameter_input and length_input and num_rings_input and
-            diameter_input.value > 0 and length_input.value > 0 and num_rings_input.value > 0):
+            diameter_input.value > 0 and length_input.value > 0 and num_rings_input.value > 0 and
+            material_valid):
         args.areInputsValid = True
     else:
         args.areInputsValid = False
@@ -580,7 +2082,8 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                      height_factors, gap_values, draw_border, draw_gap_centerlines, gap_centerlines_interior_only,
                      draw_crown_peaks, draw_crown_waves, draw_crown_midlines, draw_crown_h_midlines,
                      partial_crown_midlines, draw_crown_quarters, partial_crown_quarters, create_coincident_points,
-                     draw_fold_lock_limits, fold_lock_columns):
+                     draw_fold_lock_limits, fold_lock_columns, per_ring_fold_lock_config,
+                     balloon_wall_um):
     """Draw stent frame based on parameters using optimized calculations"""
     import math
 
@@ -662,7 +2165,7 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                     mm_to_cm(0.0), mm_to_cm(total_length), 0)
             )
             line.isConstruction = True
-            
+
             # Right border
             line = lines.addByTwoPoints(
                 adsk.core.Point3D.create(mm_to_cm(width_mm), mm_to_cm(0.0), 0),
@@ -670,7 +2173,7 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                     mm_to_cm(width_mm), mm_to_cm(total_length), 0)
             )
             line.isConstruction = True
-            
+
             # Top border
             line = lines.addByTwoPoints(
                 adsk.core.Point3D.create(
@@ -679,7 +2182,7 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                     mm_to_cm(width_mm), mm_to_cm(total_length), 0)
             )
             line.isConstruction = True
-            
+
             # Bottom border
             line = lines.addByTwoPoints(
                 adsk.core.Point3D.create(mm_to_cm(0.0), mm_to_cm(0.0), 0),
@@ -819,58 +2322,66 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                 line.isConstruction = True
 
         # Draw fold-lock limit lines in specified crown boxes
-        if draw_fold_lock_limits and fold_lock_columns:
+        if draw_fold_lock_limits:
+            crown_spacing = width_mm / crowns_per_ring
+
+            # Always use per-ring configuration
             try:
-                # Parse fold-lock column indices
-                fold_lock_indices = [int(x.strip()) for x in fold_lock_columns.split(
-                    ',') if x.strip().isdigit()]
-                crown_spacing = width_mm / crowns_per_ring
+                # Parse per-ring configuration: "ring:boxes:gap_mm;ring:boxes:gap_mm"
+                ring_configs = {}
+                for config_part in per_ring_fold_lock_config.split(';'):
+                    if ':' in config_part:
+                        parts = config_part.strip().split(':')
+                        if len(parts) == 3:
+                            # Convert to 0-based
+                            ring_idx = int(parts[0].strip()) - 1
+                            boxes_str = parts[1].strip()
+                            # Now in mm, not fraction
+                            gap_width_mm = float(parts[2].strip())
+                            box_indices = [int(x.strip()) for x in boxes_str.split(
+                                ',') if x.strip().isdigit()]
+                            ring_configs[ring_idx] = {
+                                'boxes': box_indices, 'gap_mm': gap_width_mm}
 
-                # Calculate fold-lock limits (typically 60-70% of crown width)
-                fold_lock_fraction = 0.65  # 65% of crown width
+                # Draw fold-lock lines for each configured ring/gap
+                for gap_idx, gap_center_y in enumerate(gap_centers):
+                    if gap_idx in ring_configs:
+                        config = ring_configs[gap_idx]
+                        fold_lock_indices = config['boxes']
+                        # Gap width in mm
+                        fold_lock_gap_mm = config['gap_mm']
 
-                for crown_idx in fold_lock_indices:
-                    if 0 <= crown_idx < crowns_per_ring:
-                        # Calculate crown box boundaries
-                        crown_left = crown_idx * crown_spacing
-                        crown_right = (crown_idx + 1) * crown_spacing
-                        crown_center = (crown_left + crown_right) / 2
+                        # Use half the gap width for vertical offset
+                        line_offset = fold_lock_gap_mm / 2
 
-                        # Calculate fold-lock limit positions
-                        limit_offset = crown_spacing * fold_lock_fraction / 2
-                        left_limit = crown_center - limit_offset
-                        right_limit = crown_center + limit_offset
+                        # Draw lines for specified crown boxes
+                        for crown_idx in fold_lock_indices:
+                            if 0 <= crown_idx < crowns_per_ring:
+                                # Calculate crown box boundaries
+                                crown_left = crown_idx * crown_spacing
+                                crown_right = (
+                                    crown_idx + 1) * crown_spacing
 
-                        # Draw horizontal lines within the gaps for this crown box
-                        # For each gap between rings, draw horizontal fold-lock limit lines above and below gap center
-                        for gap_idx in range(len(gap_centers)):
-                            gap_center_y = gap_centers[gap_idx]
+                                # Draw horizontal fold-lock limit line ABOVE gap center
+                                line = lines.addByTwoPoints(
+                                    adsk.core.Point3D.create(
+                                        mm_to_cm(crown_left), mm_to_cm(gap_center_y - line_offset), 0),
+                                    adsk.core.Point3D.create(
+                                        mm_to_cm(crown_right), mm_to_cm(gap_center_y - line_offset), 0)
+                                )
+                                line.isConstruction = True
 
-                            # Calculate offset from gap center (typically 20-30% of gap height)
-                            gap_height = gap_values[gap_idx] if gap_idx < len(
-                                gap_values) else 0.14  # Default gap if not available
-                            line_offset = gap_height * 0.25  # 25% of gap height above/below center
+                                # Draw horizontal fold-lock limit line BELOW gap center
+                                line = lines.addByTwoPoints(
+                                    adsk.core.Point3D.create(
+                                        mm_to_cm(crown_left), mm_to_cm(gap_center_y + line_offset), 0),
+                                    adsk.core.Point3D.create(
+                                        mm_to_cm(crown_right), mm_to_cm(gap_center_y + line_offset), 0)
+                                )
+                                line.isConstruction = True
 
-                            # Draw horizontal fold-lock limit line ABOVE gap center
-                            line = lines.addByTwoPoints(
-                                adsk.core.Point3D.create(
-                                    mm_to_cm(left_limit), mm_to_cm(gap_center_y - line_offset), 0),
-                                adsk.core.Point3D.create(
-                                    mm_to_cm(right_limit), mm_to_cm(gap_center_y - line_offset), 0)
-                            )
-                            line.isConstruction = True
-
-                            # Draw horizontal fold-lock limit line BELOW gap center
-                            line = lines.addByTwoPoints(
-                                adsk.core.Point3D.create(
-                                    mm_to_cm(left_limit), mm_to_cm(gap_center_y + line_offset), 0),
-                                adsk.core.Point3D.create(
-                                    mm_to_cm(right_limit), mm_to_cm(gap_center_y + line_offset), 0)
-                            )
-                            line.isConstruction = True
-
-            except ValueError:
-                # Ignore invalid fold-lock column format
+            except (ValueError, IndexError):
+                # If per-ring config is invalid, don't draw fold-lock lines
                 pass
 
         # Show summary
