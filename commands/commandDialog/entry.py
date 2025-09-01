@@ -502,8 +502,8 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
 
     # Height factors table - replaces text input for better usability
     height_factors_table = height_inputs.addTableCommandInput(
-        'height_factors_table', 'Ring Height Proportions', 2, '100:200')
-    height_factors_table.tooltip = 'Set relative proportions for each ring height - automatically scaled to fit total length'
+        'height_factors_table', 'Ring Height Proportions', 3, '80:120:120')
+    height_factors_table.tooltip = 'Set relative proportions for each ring height and view calculated sagitta values'
     height_factors_table.maximumVisibleRows = 10
     height_factors_table.hasGrid = True
 
@@ -1154,6 +1154,9 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
                 if abs(current_value - average_ring_height) / max(average_ring_height, 0.1) < 0.5:
                     height_input.value = average_ring_height
                     update_crown_arc_calculations(inputs)
+            
+            # Update sagitta values in height table since length affects ring scaling
+            update_sagitta_values_in_height_table(inputs)
 
         except Exception as e:
             app = adsk.core.Application.get()
@@ -1200,6 +1203,9 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
 
                 # Update the text configuration
                 config_input.value = ', '.join(height_factors)
+                
+                # Recalculate and update sagitta values for all rings
+                update_sagitta_values_in_height_table(all_inputs)
 
         except Exception as e:
             app = adsk.core.Application.get()
@@ -1234,6 +1240,9 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
 
                 # Update the text configuration
                 config_input.value = ', '.join(gap_values)
+                
+                # Update sagitta values since gaps affect available ring space
+                update_sagitta_values_in_height_table(all_inputs)
 
         except Exception as e:
             app = adsk.core.Application.get()
@@ -1271,6 +1280,9 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
 
                     # Trigger update of the hidden text input
                     update_height_factors_from_table(all_inputs)
+                    
+                    # Update sagitta values since all height factors changed
+                    update_sagitta_values_in_height_table(all_inputs)
 
                 # Reset the button
                 update_button.value = False
@@ -1428,11 +1440,39 @@ def update_height_factors_table(inputs):
             inputs.itemById('height_factors_table'))
         config_input = adsk.core.StringValueCommandInput.cast(
             inputs.itemById('height_factors'))
+        
+        # Get parameters needed for sagitta calculation
+        length_input = adsk.core.ValueCommandInput.cast(
+            inputs.itemById('length'))
+        gap_input = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('gap_between_rings'))
 
         if not all([num_rings_input, table_input]):
             return
 
         num_rings = num_rings_input.value
+        
+        # Get stent length (convert from cm to mm)
+        stent_length_mm = 8.0  # Default
+        if length_input:
+            stent_length_mm = length_input.value * 10.0  # cm to mm
+
+        # Parse gap values to calculate available ring space
+        gap_values = []
+        if gap_input and gap_input.value:
+            try:
+                gap_values = [float(x.strip()) for x in gap_input.value.split(',')]
+            except:
+                pass
+        
+        # Ensure we have gap values
+        num_gaps = max(1, num_rings - 1)
+        while len(gap_values) < num_gaps:
+            gap_values.append(gap_values[-1] if gap_values else 0.16)
+        gap_values = gap_values[:num_gaps]
+        
+        total_gap_space = sum(gap_values) if num_gaps > 0 else 0.0
+        available_ring_space = max(0.0, stent_length_mm - total_gap_space)
 
         # Parse current configuration from text input
         height_factors = []
@@ -1448,6 +1488,10 @@ def update_height_factors_table(inputs):
             height_factors.append(1.0)
         height_factors = height_factors[:num_rings]
 
+        # Calculate scaled ring heights based on available space
+        total_height_factors = sum(height_factors) if height_factors else 1.0
+        ring_scale_factor = available_ring_space / total_height_factors if total_height_factors > 0 else 1.0
+
         # Clear existing table contents
         table_input.clear()
 
@@ -1456,9 +1500,12 @@ def update_height_factors_table(inputs):
             'height_header_ring', '', 'Ring', 1, True)
         header_factor = inputs.addTextBoxCommandInput(
             'height_header_factor', '', 'Height Factor', 1, True)
+        header_sagitta = inputs.addTextBoxCommandInput(
+            'height_header_sagitta', '', 'Sagitta (mm)', 1, True)
 
         table_input.addCommandInput(header_ring, 0, 0)
         table_input.addCommandInput(header_factor, 0, 1)
+        table_input.addCommandInput(header_sagitta, 0, 2)
 
         # Add data rows for each ring
         for ring_num in range(1, num_rings + 1):
@@ -1477,11 +1524,106 @@ def update_height_factors_table(inputs):
             factor_input.tooltip = f'Height proportion for ring {ring_num} (relative value)'
             table_input.addCommandInput(factor_input, row_index, 1)
 
+            # Calculate actual ring height and sagitta
+            scaled_ring_height_mm = default_factor * ring_scale_factor
+            # For symmetric rings, sagitta ≈ height/2
+            calculated_sagitta_mm = scaled_ring_height_mm / 2.0
+            
+            # Display calculated sagitta (read-only)
+            sagitta_display = inputs.addTextBoxCommandInput(
+                f'height_ring_{ring_num}_sagitta', '', f'{calculated_sagitta_mm:.3f}', 1, True)
+            sagitta_display.tooltip = f'Calculated sagitta for ring {ring_num} based on scaled height ({scaled_ring_height_mm:.3f} mm)'
+            table_input.addCommandInput(sagitta_display, row_index, 2)
+
     except Exception as e:
         app = adsk.core.Application.get()
         ui = app.userInterface
         if ui:
             ui.messageBox(f'Error updating height factors table: {str(e)}')
+
+
+def update_sagitta_values_in_height_table(inputs):
+    """Update only the sagitta values in the height factors table without rebuilding the entire table"""
+    try:
+        # Get required inputs
+        num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
+            inputs.itemById('num_rings'))
+        length_input = adsk.core.ValueCommandInput.cast(
+            inputs.itemById('length'))
+        gap_input = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('gap_between_rings'))
+        config_input = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('height_factors'))
+
+        if not all([num_rings_input, length_input]):
+            return
+
+        num_rings = num_rings_input.value
+        
+        # Get stent length (convert from cm to mm)
+        stent_length_mm = length_input.value * 10.0  # cm to mm
+
+        # Parse gap values to calculate available ring space
+        gap_values = []
+        if gap_input and gap_input.value:
+            try:
+                gap_values = [float(x.strip()) for x in gap_input.value.split(',')]
+            except:
+                pass
+        
+        # Ensure we have gap values
+        num_gaps = max(1, num_rings - 1)
+        while len(gap_values) < num_gaps:
+            gap_values.append(gap_values[-1] if gap_values else 0.16)
+        gap_values = gap_values[:num_gaps]
+        
+        total_gap_space = sum(gap_values) if num_gaps > 0 else 0.0
+        available_ring_space = max(0.0, stent_length_mm - total_gap_space)
+
+        # Parse current height factors
+        height_factors = []
+        if config_input and config_input.value:
+            try:
+                height_factors = [float(x.strip()) for x in config_input.value.split(',')]
+            except:
+                pass
+
+        # Ensure we have values for all rings
+        while len(height_factors) < num_rings:
+            height_factors.append(1.0)
+        height_factors = height_factors[:num_rings]
+
+        # Calculate scaling factor
+        total_height_factors = sum(height_factors) if height_factors else 1.0
+        ring_scale_factor = available_ring_space / total_height_factors if total_height_factors > 0 else 1.0
+
+        # Update sagitta values for each ring
+        for ring_num in range(1, num_rings + 1):
+            try:
+                # Get current height factor from table input
+                factor_input = adsk.core.ValueCommandInput.cast(
+                    inputs.itemById(f'height_ring_{ring_num}_factor'))
+                if factor_input:
+                    current_factor = factor_input.value
+                else:
+                    current_factor = height_factors[ring_num - 1] if ring_num - 1 < len(height_factors) else 1.0
+
+                # Calculate actual ring height and sagitta
+                scaled_ring_height_mm = current_factor * ring_scale_factor
+                calculated_sagitta_mm = scaled_ring_height_mm / 2.0
+
+                # Update sagitta display
+                sagitta_display = adsk.core.TextBoxCommandInput.cast(
+                    inputs.itemById(f'height_ring_{ring_num}_sagitta'))
+                if sagitta_display:
+                    sagitta_display.text = f'{calculated_sagitta_mm:.3f}'
+                    sagitta_display.tooltip = f'Calculated sagitta for ring {ring_num} based on scaled height ({scaled_ring_height_mm:.3f} mm)'
+
+            except Exception as e:
+                futil.log(f'Error updating sagitta for ring {ring_num}: {str(e)}')
+
+    except Exception as e:
+        futil.log(f'Error updating sagitta values: {str(e)}')
 
 
 def update_gap_config_table(inputs):
@@ -1673,6 +1815,9 @@ def update_height_factors_from_table(inputs):
 
             # Update the text configuration
             config_input.value = ', '.join(height_factors)
+            
+            # Update sagitta values since height factors changed
+            update_sagitta_values_in_height_table(inputs)
 
     except Exception as e:
         app = adsk.core.Application.get()
