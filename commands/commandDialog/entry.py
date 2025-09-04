@@ -1,3 +1,4 @@
+from typing import Dict, Optional
 import adsk.core
 import adsk.fusion
 import os
@@ -6,7 +7,6 @@ from ...lib import fusionAddInUtils as futil
 from ... import config
 app = adsk.core.Application.get()
 ui = app.userInterface
-
 
 # TODO *** Specify the command identity information. ***
 CMD_ID = f'{config.COMPANY_NAME}_{config.ADDIN_NAME}_stentFrameDesigner'
@@ -42,6 +42,12 @@ last_used_values = {
     # Rings: ends slightly taller to be “more openable”
     'height_factors': '1.20, 1.00, 1.00, 1.00, 1.00, 1.10',
 
+    # Default chord values (mm) - will be calculated from height factors if not specified
+    'chord_values': '',
+
+    # Default sagitta values (mm) - will be calculated from crown arc radius if not specified
+    'sagitta_values': '',
+
     # Gaps (mm, apex‑to‑apex): fold‑lock at ends (16 µm wall), body kept larger
     # Order: 1↔2, 2↔3, 3↔4, 4↔5, 5↔6
     'gap_between_rings': '0.095, 0.160, 0.160, 0.160, 0.100',
@@ -53,6 +59,7 @@ last_used_values = {
     'draw_crown_waves': True,
     'draw_crown_midlines': False,
     'draw_crown_h_midlines': False,
+    'draw_crown_chord_lines': True,
     'partial_crown_midlines': 0,
     'draw_crown_quarters': False,
     'partial_crown_quarters': 0,
@@ -87,6 +94,8 @@ default_values = {
     'crowns_per_ring': 8,
 
     'height_factors': '1.20, 1.00, 1.00, 1.00, 1.00, 1.10',  # Recommended pattern
+    'chord_values': '',
+    'sagitta_values': '',
     # g₀=0.14mm with end reductions
     'gap_between_rings': '0.095, 0.160, 0.160, 0.160, 0.100',
     'draw_border': True,
@@ -95,6 +104,7 @@ default_values = {
     'draw_crown_waves': True,      # Essential for crown definitions
     'draw_crown_midlines': False,
     'draw_crown_h_midlines': False,
+    'draw_crown_chord_lines': True,
     'partial_crown_midlines': 0,
     'draw_crown_quarters': False,
     'partial_crown_quarters': 0,
@@ -288,6 +298,202 @@ def crown_arc_curvature_from_Rc(Rc_um):
     return 1.0 / (Rc_um / 1000.0)
 
 
+# ---------- Quarter-wave helper (from crown_arc_calc) ----------
+
+def _solve_delta_for_R(H, W, w, R):
+    """Internal: solve tangency equation for delta given H,W,w,R (radians)."""
+    import math
+    p = 0.5*w
+    A = H - p
+
+    def F(d):
+        s = math.sin(d)
+        c = math.cos(d)
+        denom = W - 2.0*R*s
+        if abs(denom) < 1e-14:
+            denom = 1e-14 if denom >= 0 else -1e-14
+        return math.tan(d) - (2.0*(A - R*(1.0 - c))) / denom
+    lo, hi = math.radians(5.0), math.radians(89.9)
+    step = math.radians(0.05)
+    best_d, best_val = lo, abs(F(lo))
+    prev_d, prev_f = lo, F(lo)
+    bracket = None
+    d = lo + step
+    while d <= hi + 1e-12:
+        fd = F(d)
+        if abs(fd) < best_val:
+            best_val, best_d = abs(fd), d
+        if prev_f * fd < 0.0:
+            bracket = (prev_d, d)
+            break
+        prev_d, prev_f = d, fd
+        d += step
+    if bracket is None:
+        span = math.radians(5.0)
+        lo = max(math.radians(1e-6), best_d - 0.5*span)
+        hi = min(math.radians(89.9),   best_d + 0.5*span)
+    else:
+        lo, hi = bracket
+    # bisection
+    flo, fhi = F(lo), F(hi)
+    for _ in range(120):
+        mid = 0.5*(lo+hi)
+        fm = F(mid)
+        if abs(fm) < 1e-14 or (hi - lo) < 1e-12:
+            return mid
+        if flo * fm < 0.0:
+            hi, fhi = mid, fm
+        else:
+            lo, flo = mid, fm
+    return 0.5*(lo+hi)
+
+
+def _solve_delta_for_quarter(H: float, W: float, w: float, R: float) -> float:
+    """
+    Solve for the contact angle δ (radians) for the quarter-rectangle construction:
+
+        tan δ = 2 * (H - w/2 - R*(1 - cos δ)) / (W - 2*R*sin δ)
+
+    Robust bisection on δ ∈ (5°, 89.9°), with coarse bracketing.
+    """
+    p = 0.5 * w
+    A = H - p
+
+    def F(d: float) -> float:
+        s = math.sin(d)
+        c = math.cos(d)
+        denom = W - 2.0 * R * s
+        if abs(denom) < 1e-14:
+            denom = 1e-14 if denom >= 0 else -1e-14
+        return math.tan(d) - (2.0 * (A - R * (1.0 - c))) / denom
+
+    lo, hi = math.radians(5.0), math.radians(89.9)
+    step = math.radians(0.05)
+
+    # coarse scan to find a sign change or best point
+    best_d = lo
+    best_val = abs(F(lo))
+    prev_d = lo
+    prev_f = F(prev_d)
+    bracket = None
+
+    d = lo + step
+    while d <= hi + 1e-12:
+        fd = F(d)
+        if abs(fd) < best_val:
+            best_val, best_d = abs(fd), d
+        if prev_f * fd < 0.0:
+            bracket = (prev_d, d)
+            break
+        prev_d, prev_f = d, fd
+        d += step
+
+    if bracket is None:
+        span = math.radians(5.0)
+        lo = max(math.radians(1e-6), best_d - 0.5 * span)
+        hi = min(math.radians(89.9), best_d + 0.5 * span)
+    else:
+        lo, hi = bracket
+
+    # bisection
+    flo, fhi = F(lo), F(hi)
+    for _ in range(120):
+        mid = 0.5 * (lo + hi)
+        fm = F(mid)
+        if abs(fm) < 1e-14 or (hi - lo) < 1e-12:
+            return mid
+        if flo * fm < 0.0:
+            hi, fhi = mid, fm
+        else:
+            lo, flo = mid, fm
+
+    return 0.5 * (lo + hi)
+
+
+def quarter_wave_from_rect(
+    rect_height_mm: float,
+    rect_width_mm: float,
+    strut_width_mm: float,
+    R_factor: float = 2.5,
+    R_override_mm: Optional[float] = None,
+) -> Dict[str, float]:
+    """
+    Solve the crown geometry in a *quarter* rectangle (H_box, W_box).
+    Circle center is at (W/2, w/2 + R), arc tangent to both straight arms.
+
+    Returns (all mm/deg; centerline unless noted):
+      {
+        "delta_deg", "theta_deg",
+        "X_mm", "Y_mm",           # arm offsets from the two quarter-rectangle corners to the contact
+        "y_chord_mm",             # chord height above bottom
+        "chord_mm", "sagitta_mm", # centerline chord & sagitta
+        "Rc_mm",                  # centerline radius used
+        "outer_sagitta_mm"        # outer-track sagitta (fold-lock check)
+      }
+    """
+    H = float(rect_height_mm)
+    W = float(rect_width_mm)
+    w = float(strut_width_mm)
+    R = float(R_override_mm) if R_override_mm is not None else float(
+        R_factor) * w
+    if R <= 0.0:
+        raise ValueError("Centerline radius must be positive.")
+
+    # Solve for delta
+    delta = _solve_delta_for_quarter(H, W, w, R)
+
+    s, c = math.sin(delta), math.cos(delta)
+    # contact point horizontal offset from each corner
+    X = 0.5 * (W - 2.0 * R * s)
+    # chord height above bottom
+    y_ch = (0.5 * w) + R * (1.0 - c)
+    # centerline sagitta & chord
+    h = R * (1.0 - c)
+    chord = 2.0 * R * s
+    # vertical arm
+    Y = H - y_ch
+
+    if h <= 0 or chord <= 0 or X < 0 or Y < 0:
+        raise ValueError("Infeasible geometry for given (H_box, W_box, w, R).")
+
+    return {
+        "delta_deg": math.degrees(delta),
+        "theta_deg": 2.0 * math.degrees(delta),
+        "X_mm": X,
+        "Y_mm": Y,
+        "y_chord_mm": y_ch,
+        "chord_mm": chord,
+        "sagitta_mm": h,
+        "Rc_mm": R,
+        "outer_sagitta_mm": (R + 0.5 * w) * (1.0 - c),
+    }
+
+
+def crown_from_full_wave(
+    H_full_mm: float,
+    W_full_mm: float,
+    strut_width_mm: float,
+    R_factor: float = 2.5,
+    R_override_mm: Optional[float] = None,
+) -> Dict[str, float]:
+    """
+    Convenience wrapper: accepts *full-wave* height & width.
+    Internally halves to a quarter-rectangle and calls quarter_wave_from_rect().
+    """
+    Hq = 0.5 * float(H_full_mm)  # quarter height
+    Wq = 0.5 * float(W_full_mm)  # quarter width
+    out = quarter_wave_from_rect(
+        rect_height_mm=Hq,
+        rect_width_mm=Wq,
+        strut_width_mm=strut_width_mm,
+        R_factor=R_factor,
+        R_override_mm=R_override_mm,
+    )
+    # Add echoes of full-wave inputs for traceability
+    out.update({"H_full_mm": float(H_full_mm), "W_full_mm": float(W_full_mm)})
+    return out
+
+
 def crown_arc_radius_to_width_ratio(Rc_um, w_um):
     """Rule‑of‑thumb check: Rc / strut width (dimensionless)."""
     return Rc_um / w_um
@@ -389,10 +595,10 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
         'num_rings', 'Number of Rings', 1, 20, 1, last_used_values['num_rings'])
     num_rings_input.tooltip = 'Total number of ring segments in the stent (1-20)'
 
-    # Crowns per ring with tooltip - load from saved values
+    # Waves per ring (each wave = 2 crowns). Keep id for compatibility.
     crowns_input = ring_inputs.addIntegerSpinnerCommandInput(
-        'crowns_per_ring', 'Crowns per Ring', 4, 32, 1, last_used_values['crowns_per_ring'])
-    crowns_input.tooltip = 'Number of crown peaks per ring segment (4-32)'
+        'crowns_per_ring', 'Waves per Ring', 2, 16, 1, max(2, last_used_values['crowns_per_ring']//2))
+    crowns_input.tooltip = 'Number of waves per ring (each wave contains an up and a down crown)'
 
     # Crown Arc Calculations group - provides suggested values based on stent geometry
     crown_arc_group = inputs.addGroupCommandInput(
@@ -413,7 +619,7 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     initial_radius_mm = 0.2
     crown_arc_radius_input = crown_arc_inputs.addValueInput(
         'crown_arc_radius', 'Crown Arc Radius (mm)', 'mm',
-        adsk.core.ValueInput.createByString(f'{initial_radius_mm} mm'))
+        adsk.core.ValueInput.createByReal(initial_radius_mm))
     crown_arc_radius_input.tooltip = 'Crown arc radius in mm (typical: 0.1-0.5 mm). Example: 0.2 mm = 200 µm'
 
     # Ring Height Input (needed for theta calculation)
@@ -502,8 +708,8 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
 
     # Height factors table - replaces text input for better usability
     height_factors_table = height_inputs.addTableCommandInput(
-        'height_factors_table', 'Ring Height Proportions', 3, '80:120:120')
-    height_factors_table.tooltip = 'Set relative proportions for each ring height and view calculated sagitta values'
+        'height_factors_table', 'Ring Height Proportions', 4, '80:120:120:120')
+    height_factors_table.tooltip = 'Set relative proportions for each ring height and edit calculated chord and sagitta values'
     height_factors_table.maximumVisibleRows = 10
     height_factors_table.hasGrid = True
 
@@ -511,6 +717,26 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     height_factors_input = height_inputs.addStringValueInput(
         'height_factors', 'Height Proportions (hidden)', last_used_values['height_factors'])
     height_factors_input.isVisible = False
+
+    # Hidden inputs for chord and sagitta values storage
+    chord_values_input = height_inputs.addStringValueInput(
+        'chord_values', 'Chord Values (hidden)', last_used_values['chord_values'])
+    chord_values_input.isVisible = False
+
+    sagitta_values_input = height_inputs.addStringValueInput(
+        'sagitta_values', 'Sagitta Values (hidden)', last_used_values['sagitta_values'])
+    sagitta_values_input.isVisible = False
+
+    # Paste table data functionality
+    paste_table_input = height_inputs.addTextBoxCommandInput(
+        'paste_table_data', 'Paste Table Data',
+        'Paste tab-separated table data here (with headers: Ring, Rc_mm, theta_deg, w_mm, h_mm, chord_mm, arc_mm, etc.)',
+        5, False)
+    paste_table_input.tooltip = 'Paste tabular data with chord_mm and h_mm columns to update the table automatically'
+
+    paste_button = height_inputs.addBoolValueInput(
+        'paste_table_button', 'Parse and Apply Pasted Data', False, '', False)
+    paste_button.tooltip = 'Click to parse the pasted table data and update chord and sagitta values'
 
     # Gap configuration group - start collapsed (advanced feature)
     gap_group = inputs.addGroupCommandInput('gap_group', 'Gap Configuration')
@@ -572,6 +798,13 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     h_midlines_input = draw_inputs.addBoolValueInput(
         'draw_crown_h_midlines', 'Draw Crown Horizontal Midlines', True, '', last_used_values['draw_crown_h_midlines'])
     h_midlines_input.tooltip = 'Draw additional horizontal lines at the midpoint of each crown height for finer detail'
+
+    # Sagitta guide lines removed; chord lines will be placed at sagitta offsets
+
+    # Crown chord lines option - load from saved values
+    chord_lines_input = draw_inputs.addBoolValueInput(
+        'draw_crown_chord_lines', 'Draw Crown Chord Lines', True, '', last_used_values.get('draw_crown_chord_lines', False))
+    chord_lines_input.tooltip = 'Draw horizontal chord segments at sagitta distance: first half up, second half down; alternates per ring for alignment'
 
     # Partial crown midlines control - load from saved values
     partial_midlines_input = draw_inputs.addIntegerSpinnerCommandInput(
@@ -751,6 +984,10 @@ def command_execute(args: adsk.core.CommandEventArgs):
         inputs.itemById('crowns_per_ring'))
     height_factors_input = adsk.core.StringValueCommandInput.cast(
         inputs.itemById('height_factors'))
+    chord_values_input = adsk.core.StringValueCommandInput.cast(
+        inputs.itemById('chord_values'))
+    sagitta_values_input = adsk.core.StringValueCommandInput.cast(
+        inputs.itemById('sagitta_values'))
     gap_input = adsk.core.StringValueCommandInput.cast(
         inputs.itemById('gap_between_rings'))
 
@@ -767,6 +1004,9 @@ def command_execute(args: adsk.core.CommandEventArgs):
         inputs.itemById('draw_crown_midlines'))
     draw_crown_h_midlines_input = adsk.core.BoolValueCommandInput.cast(
         inputs.itemById('draw_crown_h_midlines'))
+    # No sagitta lines input (removed)
+    draw_crown_chord_lines_input = adsk.core.BoolValueCommandInput.cast(
+        inputs.itemById('draw_crown_chord_lines'))
     partial_crown_midlines_input = adsk.core.IntegerSpinnerCommandInput.cast(
         inputs.itemById('partial_crown_midlines'))
     draw_crown_quarters_input = adsk.core.BoolValueCommandInput.cast(
@@ -818,6 +1058,8 @@ def command_execute(args: adsk.core.CommandEventArgs):
         num_rings_input.value = default_values['num_rings']
         crowns_per_ring_input.value = default_values['crowns_per_ring']
         height_factors_input.value = default_values['height_factors']
+        chord_values_input.value = default_values['chord_values']
+        sagitta_values_input.value = default_values['sagitta_values']
         gap_input.value = default_values['gap_between_rings']
         draw_border_input.value = default_values['draw_border']
         draw_gap_centerlines_input.value = default_values['draw_gap_centerlines']
@@ -825,6 +1067,8 @@ def command_execute(args: adsk.core.CommandEventArgs):
         draw_crown_waves_input.value = default_values['draw_crown_waves']
         draw_crown_midlines_input.value = default_values['draw_crown_midlines']
         draw_crown_h_midlines_input.value = default_values['draw_crown_h_midlines']
+        # sagitta lines default reset removed
+        draw_crown_chord_lines_input.value = default_values['draw_crown_chord_lines']
         partial_crown_midlines_input.value = default_values['partial_crown_midlines']
         draw_crown_quarters_input.value = default_values['draw_crown_quarters']
         partial_crown_quarters_input.value = default_values['partial_crown_quarters']
@@ -876,7 +1120,9 @@ def command_execute(args: adsk.core.CommandEventArgs):
     # Convert cm to mm (Fusion returns values in cm)
     length = length_input.value * 10
     num_rings = num_rings_input.value
-    crowns_per_ring = crowns_per_ring_input.value
+    # Interpret UI value as waves; each wave = 2 crowns
+    waves_per_ring = max(1, crowns_per_ring_input.value)
+    crowns_per_ring = max(2, waves_per_ring * 2)
 
     # Collect height factors from table
     height_factors_list = []
@@ -893,6 +1139,48 @@ def command_execute(args: adsk.core.CommandEventArgs):
 
     # Convert to string for storage (backwards compatibility)
     height_factors_str = ', '.join([str(f) for f in height_factors_list])
+
+    # Collect chord values from table
+    chord_values_list = []
+    for ring_num in range(1, num_rings + 1):
+        try:
+            chord_input = adsk.core.ValueCommandInput.cast(
+                inputs.itemById(f'height_ring_{ring_num}_chord'))
+            if chord_input:
+                chord_values_list.append(chord_input.value*10)
+            else:
+                chord_values_list.append(1.0)  # Default
+        except:
+            chord_values_list.append(1.0)  # Default
+
+    # Convert chord values to string for storage
+    chord_values_str = ', '.join([str(f) for f in chord_values_list])
+    # Persist into hidden input immediately (so table refresh keeps edits)
+    try:
+        chord_values_input.value = chord_values_str
+    except:
+        pass
+
+    # Collect sagitta values from table
+    sagitta_values_list = []
+    for ring_num in range(1, num_rings + 1):
+        try:
+            sagitta_input = adsk.core.ValueCommandInput.cast(
+                inputs.itemById(f'height_ring_{ring_num}_sagitta'))
+            if sagitta_input:
+                sagitta_values_list.append(sagitta_input.value*10)
+            else:
+                sagitta_values_list.append(0.1)  # Default
+        except:
+            sagitta_values_list.append(0.1)  # Default
+
+    # Convert sagitta values to string for storage
+    sagitta_values_str = ', '.join([str(f) for f in sagitta_values_list])
+    # Persist into hidden input immediately (so table refresh keeps edits)
+    try:
+        sagitta_values_input.value = sagitta_values_str
+    except:
+        pass
 
     # Collect gap values from table
     gap_values_list = []
@@ -918,6 +1206,8 @@ def command_execute(args: adsk.core.CommandEventArgs):
     draw_crown_waves = draw_crown_waves_input.value
     draw_crown_midlines = draw_crown_midlines_input.value
     draw_crown_h_midlines = draw_crown_h_midlines_input.value
+    # sagitta lines flag removed
+    draw_crown_chord_lines = draw_crown_chord_lines_input.value
     partial_crown_midlines = partial_crown_midlines_input.value
     draw_crown_quarters = draw_crown_quarters_input.value
     partial_crown_quarters = partial_crown_quarters_input.value
@@ -963,6 +1253,11 @@ def command_execute(args: adsk.core.CommandEventArgs):
 
     # Use height factors from table (already collected above)
     height_factors = height_factors_list
+    # Persist height factors immediately to hidden input
+    try:
+        height_factors_input.value = height_factors_str
+    except:
+        pass
 
     # Use gap values from table (already collected above)
     gap_values = gap_values_list
@@ -986,6 +1281,8 @@ def command_execute(args: adsk.core.CommandEventArgs):
         'num_rings': num_rings,
         'crowns_per_ring': crowns_per_ring,
         'height_factors': height_factors_str,
+        'chord_values': chord_values_str,
+        'sagitta_values': sagitta_values_str,
         'gap_between_rings': gap_str,
         'draw_border': draw_border,
         'draw_gap_centerlines': draw_gap_centerlines,
@@ -993,6 +1290,8 @@ def command_execute(args: adsk.core.CommandEventArgs):
         'draw_crown_waves': draw_crown_waves,
         'draw_crown_midlines': draw_crown_midlines,
         'draw_crown_h_midlines': draw_crown_h_midlines,
+        # sagitta lines flag removed
+        'draw_crown_chord_lines': draw_crown_chord_lines,
         'partial_crown_midlines': partial_crown_midlines,
         'draw_crown_quarters': draw_crown_quarters,
         'partial_crown_quarters': partial_crown_quarters,
@@ -1008,10 +1307,10 @@ def command_execute(args: adsk.core.CommandEventArgs):
     # Call the stent frame drawing function
     draw_stent_frame(diameter, length, num_rings, crowns_per_ring,
                      height_factors, gap_values, draw_border, draw_gap_centerlines, gap_centerlines_interior_only,
-                     draw_crown_peaks, draw_crown_waves, draw_crown_midlines, draw_crown_h_midlines,
+                     draw_crown_peaks, draw_crown_waves, draw_crown_midlines, draw_crown_h_midlines, draw_crown_chord_lines,
                      partial_crown_midlines, draw_crown_quarters, partial_crown_quarters, create_coincident_points,
                      draw_fold_lock_limits, fold_lock_columns, per_ring_fold_lock_config,
-                     balloon_wall_um)
+                     balloon_wall_um, chord_values_list, sagitta_values_list)
 
 
 # This event handler is called when the command needs to compute a new preview in the graphics window.
@@ -1095,6 +1394,9 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
         try:
             futil.log(f'Crown arc input changed: {changed_input.id}')
             update_crown_arc_calculations(inputs)
+            # Update sagitta values since crown arc radius affects sagitta calculation
+            if changed_input.id == 'crown_arc_radius':
+                update_sagitta_values_in_height_table(inputs)
             futil.log('Crown arc calculations completed')
         except Exception as e:
             futil.log(f'Crown arc calculation error: {str(e)}')
@@ -1154,7 +1456,7 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
                 if abs(current_value - average_ring_height) / max(average_ring_height, 0.1) < 0.5:
                     height_input.value = average_ring_height
                     update_crown_arc_calculations(inputs)
-            
+
             # Update sagitta values in height table since length affects ring scaling
             update_sagitta_values_in_height_table(inputs)
 
@@ -1203,7 +1505,7 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
 
                 # Update the text configuration
                 config_input.value = ', '.join(height_factors)
-                
+
                 # Recalculate and update sagitta values for all rings
                 update_sagitta_values_in_height_table(all_inputs)
 
@@ -1240,7 +1542,7 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
 
                 # Update the text configuration
                 config_input.value = ', '.join(gap_values)
-                
+
                 # Update sagitta values since gaps affect available ring space
                 update_sagitta_values_in_height_table(all_inputs)
 
@@ -1280,7 +1582,7 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
 
                     # Trigger update of the hidden text input
                     update_height_factors_from_table(all_inputs)
-                    
+
                     # Update sagitta values since all height factors changed
                     update_sagitta_values_in_height_table(all_inputs)
 
@@ -1335,6 +1637,595 @@ def command_input_changed(args: adsk.core.InputChangedEventArgs):
             ui = app.userInterface
             ui.messageBox(
                 f"Error updating all gaps: {str(e)}", "Debug: Exception")
+
+    # Handle paste table button
+    elif changed_input.id == 'paste_table_button':
+        try:
+            paste_button = adsk.core.BoolValueCommandInput.cast(changed_input)
+            if paste_button.value:  # Button was clicked
+                command = adsk.core.Command.cast(args.firingEvent.sender)
+                all_inputs = command.commandInputs
+
+                # Get the pasted data
+                paste_input = adsk.core.TextBoxCommandInput.cast(
+                    all_inputs.itemById('paste_table_data'))
+                num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
+                    all_inputs.itemById('num_rings'))
+
+                if paste_input and num_rings_input and paste_input.text.strip():
+                    try:
+                        parse_and_apply_table_data(
+                            all_inputs, paste_input.text.strip())
+                        # Clear the paste input
+                        paste_input.text = ''
+                        # Show success message
+                        app = adsk.core.Application.get()
+                        ui = app.userInterface
+                        ui.messageBox(
+                            "Table data successfully parsed and applied!", "Success")
+                    except Exception as parse_error:
+                        app = adsk.core.Application.get()
+                        ui = app.userInterface
+                        ui.messageBox(
+                            f"Error parsing table data: {str(parse_error)}", "Parse Error")
+
+                # Reset the button
+                paste_button.value = False
+
+        except Exception as e:
+            app = adsk.core.Application.get()
+            ui = app.userInterface
+            ui.messageBox(
+                f"Error processing paste table data: {str(e)}", "Debug: Exception")
+
+    # Handle edits to chord cells: persist to hidden string input immediately
+    elif changed_input.id.startswith('height_ring_') and changed_input.id.endswith('_chord'):
+        try:
+            command = adsk.core.Command.cast(args.firingEvent.sender)
+            all_inputs = command.commandInputs
+            num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
+                all_inputs.itemById('num_rings'))
+            chord_config_input = adsk.core.StringValueCommandInput.cast(
+                all_inputs.itemById('chord_values'))
+
+            if num_rings_input and chord_config_input:
+                num_rings = num_rings_input.value
+                chord_values = []
+                for ring_num in range(1, num_rings + 1):
+                    try:
+                        v_in = adsk.core.ValueCommandInput.cast(
+                            all_inputs.itemById(f'height_ring_{ring_num}_chord'))
+                        # store as mm (convert from cm)
+                        chord_values.append(
+                            str(v_in.value * 10.0)) if v_in else chord_values.append('0.0')
+                    except:
+                        chord_values.append('0.0')
+                chord_config_input.value = ', '.join(chord_values)
+        except:
+            pass
+
+    # Handle edits to sagitta cells: persist to hidden string input immediately
+    elif changed_input.id.startswith('height_ring_') and changed_input.id.endswith('_sagitta'):
+        try:
+            command = adsk.core.Command.cast(args.firingEvent.sender)
+            all_inputs = command.commandInputs
+            num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
+                all_inputs.itemById('num_rings'))
+            sagitta_config_input = adsk.core.StringValueCommandInput.cast(
+                all_inputs.itemById('sagitta_values'))
+
+            if num_rings_input and sagitta_config_input:
+                num_rings = num_rings_input.value
+                sagitta_values = []
+                for ring_num in range(1, num_rings + 1):
+                    try:
+                        v_in = adsk.core.ValueCommandInput.cast(
+                            all_inputs.itemById(f'height_ring_{ring_num}_sagitta'))
+                        # store as mm (convert from cm)
+                        sagitta_values.append(
+                            str(v_in.value * 10.0)) if v_in else sagitta_values.append('0.0')
+                    except:
+                        sagitta_values.append('0.0')
+                sagitta_config_input.value = ', '.join(sagitta_values)
+        except:
+            pass
+
+
+def parse_and_apply_table_data(inputs, table_text):
+    """Parse pasted table data and update chord and sagitta values"""
+    import re
+    try:
+        lines = table_text.strip().split('\n')
+        if len(lines) < 2:
+            raise ValueError(
+                "Table must have at least a header row and one data row")
+
+        futil.log(f"Raw table text: {repr(table_text[:200])}")
+        futil.log(f"Number of lines: {len(lines)}")
+        futil.log(f"First few lines: {lines[:5]}")
+
+        # EXCEL DIRECT PASTE DETECTION: cells come one-per-line; reconstruct dynamically
+        if len(lines) > 10 and all(len(line.strip().split()) <= 2 for line in lines[:10]):
+            futil.log(
+                "Detected Excel direct paste (one cell per line); reconstructing table")
+
+            # Helper to detect numeric tokens (defined before use)
+            def _looks_like_number(s: str) -> bool:
+                try:
+                    float(s)
+                    return True
+                except:
+                    return False
+
+            # Find the first occurrence of a likely header token (e.g., 'Ring')
+            header_start = -1
+            for i, line in enumerate(lines):
+                tok = line.strip()
+                if tok and not _looks_like_number(tok):
+                    header_start = i
+                    break
+
+            if header_start >= 0:
+                # Collect header tokens until the first numeric cell (start of data)
+                header_tokens = []
+                data_tokens = []
+                in_header = True
+                for tok in [ln.strip() for ln in lines[header_start:] if ln.strip()]:
+                    if in_header and not _looks_like_number(tok):
+                        header_tokens.append(tok)
+                    else:
+                        in_header = False
+                        data_tokens.append(tok)
+
+                col_count = len(header_tokens)
+                futil.log(
+                    f"Reconstructed header tokens ({col_count}): {header_tokens}")
+
+                if col_count >= 2 and len(data_tokens) >= col_count:
+                    reconstructed = []
+                    reconstructed.append('\t'.join(header_tokens))
+                    for i in range(0, len(data_tokens), col_count):
+                        row = data_tokens[i:i+col_count]
+                        if len(row) == col_count:
+                            reconstructed.append('\t'.join(row))
+                    if len(reconstructed) >= 2:
+                        lines = reconstructed
+                        futil.log(
+                            f"Reconstructed {len(reconstructed)-1} data rows from Excel paste")
+                    else:
+                        futil.log(
+                            "Excel reconstruction produced no data rows; continuing with original lines")
+                else:
+                    futil.log(
+                        "Excel reconstruction failed (insufficient tokens); continuing with original lines")
+
+        # Parse header to find column indices - try different separators
+        header = []
+        separator = '\t'  # default
+
+        futil.log(f"First line after reconstruction: {repr(lines[0])}")
+
+        # SPECIAL CASE: If we detect this looks like the expected table format,
+        # skip header parsing and go straight to known format
+        if ('Ring' in lines[0] and len(lines) > 1):
+            # Check if data rows look right
+            test_row = [col for col in re.split(
+                r'\s+', lines[1].strip()) if col]
+            futil.log(
+                f"Detected table format, test row has {len(test_row)} values: {test_row}")
+
+            if len(test_row) >= 6:  # We expect 10 columns but at minimum need Ring + chord_mm + h_mm + others
+                futil.log("Using direct known format bypass")
+                # Build header mapping from the actual header row
+                header_tokens = [col for col in re.split(
+                    r'\s+', lines[0].strip()) if col]
+                name_to_idx = {col.lower(): i for i,
+                               col in enumerate(header_tokens)}
+
+                # Helper to find preferred column index by name substring matches
+                def find_idx(*candidates):
+                    for c in candidates:
+                        for k, i in name_to_idx.items():
+                            if k == c or c in k:
+                                return i
+                    return -1
+
+                ring_col = find_idx('ring')
+                # Prefer centerline columns if available
+                chord_col = find_idx('chord_center_mm', 'chord_mm', 'chord')
+                sagitta_col = find_idx(
+                    'sagitta_center_mm', 'sagitta_mm', 'h_mm', 'sagitta')
+                width_col = find_idx('w_mm_from_widthlist', 'w_mm')
+
+                futil.log(
+                    f"Direct mapping: ring={ring_col}, chord={chord_col}, sagitta={sagitta_col}, width={width_col}")
+
+                # Jump straight to data parsing
+                chord_values = []
+                sagitta_values = []
+
+                for line_num, line in enumerate(lines[1:], start=2):
+                    if not line.strip():
+                        continue
+
+                    # Split on any whitespace
+                    cells = [col for col in re.split(
+                        r'\s+', line.strip()) if col]
+
+                    futil.log(
+                        f"Line {line_num}: {len(cells)} cells: {cells[:6]}")
+
+                    if len(cells) < 6:  # Need at least 6 columns
+                        futil.log(
+                            f"Skipping line {line_num} - not enough cells ({len(cells)} < 6)")
+                        continue
+
+                    try:
+                        ring_num = int(
+                            cells[ring_col]) if ring_col != -1 else (len(chord_values) + 1)
+                        # Use provided centerline chord and sagitta directly if available
+                        chord_value = float(
+                            cells[chord_col]) if chord_col != -1 else 0.0
+                        sagitta_value = float(
+                            cells[sagitta_col]) if sagitta_col != -1 else 0.0
+
+                        futil.log(
+                            f"Parsed line {line_num}: Ring={ring_num}, Chord={chord_value}, Sagitta={sagitta_value}")
+
+                        # Ensure we have enough entries in our lists
+                        while len(chord_values) < ring_num:
+                            chord_values.append(0.0)
+                        while len(sagitta_values) < ring_num:
+                            sagitta_values.append(0.0)
+
+                        # Store values (ring numbers are 1-based, list indices are 0-based)
+                        chord_values[ring_num - 1] = chord_value
+                        sagitta_values[ring_num - 1] = sagitta_value
+
+                    except (ValueError, IndexError) as e:
+                        futil.log(
+                            f"Warning: Could not parse line {line_num}: {line} - {str(e)}")
+                        continue
+
+                if not chord_values or not sagitta_values:
+                    raise ValueError("No valid data rows found in table")
+
+                # Update the hidden storage inputs
+                chord_input = adsk.core.StringValueCommandInput.cast(
+                    inputs.itemById('chord_values'))
+                sagitta_input = adsk.core.StringValueCommandInput.cast(
+                    inputs.itemById('sagitta_values'))
+
+                if chord_input:
+                    chord_input.value = ','.join(
+                        [str(v) for v in chord_values])
+                if sagitta_input:
+                    sagitta_input.value = ','.join(
+                        [str(v) for v in sagitta_values])
+
+                # Update the height factors table to show the new values
+                update_height_factors_table(inputs)
+
+                futil.log(
+                    f"Successfully parsed {len(chord_values)} chord values and {len(sagitta_values)} sagitta values")
+                return  # Success - exit early
+
+        # ORIGINAL PARSING LOGIC (fallback if direct format doesn't work)
+
+        # Try tab separator first
+        if '\t' in lines[0]:
+            header = lines[0].split('\t')
+            separator = '\t'
+            futil.log(f"Found tabs in header, using tab separator")
+        # Try multiple spaces (common when pasting from tables)
+        elif '  ' in lines[0]:  # Multiple spaces
+            header = [col for col in re.split(
+                r'\s{2,}', lines[0]) if col.strip()]
+            separator = 'multi_space'
+            futil.log(f"Found multiple spaces, using multi-space separator")
+        # Try any single space
+        elif ' ' in lines[0]:
+            header = [col for col in lines[0].split(' ') if col.strip()]
+            separator = 'single_space'
+            futil.log(f"Found single spaces, using single-space separator")
+        # Try comma separator
+        elif ',' in lines[0]:
+            header = lines[0].split(',')
+            separator = ','
+            futil.log(f"Found commas, using comma separator")
+        # Last resort: split on any whitespace
+        else:
+            header = lines[0].split()
+            separator = 'whitespace'
+            futil.log(f"No clear separator found, using whitespace split")
+
+        # Clean up header columns (remove extra whitespace)
+        header = [col.strip() for col in header if col.strip()]
+
+        futil.log(f"Header after parsing: {header}")
+        futil.log(f"Number of columns found: {len(header)}")
+
+        # NEW FORMAT: wave_height_mm, wave_width_mm, strut_width_mm -> compute centerline chord/sagitta
+        header_lc = [h.strip().lower() for h in header]
+        if ('wave_height_mm' in header_lc and 'wave_width_mm' in header_lc and 'strut_width_mm' in header_lc):
+            h_idx = header_lc.index('wave_height_mm')
+            w_idx = header_lc.index('wave_width_mm')
+            t_idx = header_lc.index('strut_width_mm')
+            # ring index (optional)
+            ring_idx = header_lc.index('ring') if 'ring' in header_lc else -1
+
+            # Use quarter_wave_from_rect to compute centerline chord/sagitta
+
+            chord_values = []
+            sagitta_values = []
+            for line_num, line in enumerate(lines[1:], start=2):
+                if not line.strip():
+                    continue
+                cells = [c for c in re.split(r'\s+|\t|,', line.strip()) if c]
+                try:
+                    rect_h = float(cells[h_idx])
+                    rect_w = float(cells[w_idx])
+                    strut_w = float(cells[t_idx])
+
+                    res = crown_from_full_wave(
+                        rect_h, rect_w, strut_w, R_factor=2.5)
+                    if not res:
+                        futil.log(f"No valid arc for row {line_num}; skipping")
+                        continue
+                    chord = float(res['chord_mm'])
+                    # quarter_wave_from_rect returns centerline sagitta already
+                    sag = float(res['y_chord_mm'])
+                    # Determine ring number
+                    if ring_idx != -1 and ring_idx < len(cells):
+                        ring_num = int(cells[ring_idx])
+                    else:
+                        ring_num = len(chord_values) + 1
+                    while len(chord_values) < ring_num:
+                        chord_values.append(0.0)
+                    while len(sagitta_values) < ring_num:
+                        sagitta_values.append(0.0)
+                    chord_values[ring_num - 1] = chord
+                    sagitta_values[ring_num - 1] = sag
+                except Exception as e:
+                    futil.log(
+                        f"Wave format parse warning at line {line_num}: {e}")
+                    continue
+
+            if chord_values and sagitta_values:
+                chord_input = adsk.core.StringValueCommandInput.cast(
+                    inputs.itemById('chord_values'))
+                sagitta_input = adsk.core.StringValueCommandInput.cast(
+                    inputs.itemById('sagitta_values'))
+                if chord_input:
+                    chord_input.value = ','.join(
+                        [f"{v:.6f}" for v in chord_values])
+                if sagitta_input:
+                    sagitta_input.value = ','.join(
+                        [f"{v:.6f}" for v in sagitta_values])
+                update_height_factors_table(inputs)
+                futil.log(f"Wave mapping success: {len(chord_values)} rings")
+                return
+
+        # If we still don't have enough columns, try the most aggressive approach
+        if len(header) < 5:  # We expect at least Ring, chord_mm, h_mm plus others
+            futil.log(
+                "Less than 5 columns found, trying aggressive regex parsing...")
+            import re
+            # Split on any whitespace sequence
+            header = [col for col in re.split(r'\s+', lines[0].strip()) if col]
+            separator = 'regex_whitespace'
+            futil.log(f"After regex split: {len(header)} columns: {header}")
+
+            # If still not enough, maybe it's a fixed-width format
+            if len(header) < 5:
+                futil.log(
+                    "Still not enough columns - attempting fixed-width parsing...")
+                # For your specific table format, let's try to parse based on known column names
+                header_line = lines[0]
+                if 'Ring' in header_line and 'chord_mm' in header_line and 'h_mm' in header_line:
+                    # Manual parsing for your specific format
+                    known_columns = ['Ring', 'Rc_mm', 'theta_deg', 'w_mm_from_widthlist', 'h_mm',
+                                     'chord_mm', 'arc_mm', 'curvature_1_per_mm', 'Rc_over_w', 'geom_index_half_w_over_Rc']
+                    header = known_columns
+                    separator = 'known_format'
+                    futil.log(f"Using known column format: {header}")
+                else:
+                    # Last resort: if we detect this is likely tabular data but parsing failed,
+                    # assume it's the expected format and try anyway
+                    futil.log(
+                        "Attempting to parse as expected format despite detection failure...")
+                    if len(lines) > 1 and lines[1].strip():
+                        # Check if the data rows have multiple values
+                        test_row = [col for col in re.split(
+                            r'\s+', lines[1].strip()) if col]
+                        futil.log(
+                            f"Test row has {len(test_row)} values: {test_row}")
+
+                        if len(test_row) >= 6:  # We need at least Ring, and the chord_mm, h_mm columns
+                            # Assume the standard format
+                            known_columns = ['Ring', 'Rc_mm', 'theta_deg', 'w_mm_from_widthlist', 'h_mm',
+                                             'chord_mm', 'arc_mm', 'curvature_1_per_mm', 'Rc_over_w', 'geom_index_half_w_over_Rc']
+                            header = known_columns
+                            separator = 'forced_format'
+                            futil.log(
+                                f"Forcing known column format based on data row analysis: {header}")
+                        else:
+                            futil.log(
+                                f"Data row only has {len(test_row)} values, cannot proceed")
+
+        # Find required column indices (prefer centerline-specific names)
+        ring_col = -1
+        chord_col = -1
+        sagitta_col = -1
+        width_col = -1
+        rc_col = -1
+        theta_col = -1
+
+        for i, col_name in enumerate(header):
+            col_name_clean = col_name.lower().strip()
+            futil.log(
+                f"Checking column {i}: '{col_name}' -> '{col_name_clean}'")
+
+            if 'ring' in col_name_clean:
+                ring_col = i
+                futil.log(f"Found Ring column at index {i}")
+            elif 'chord_center' in col_name_clean:
+                chord_col = i
+                futil.log(f"Found Centerline Chord column at index {i}")
+            elif 'sagitta_center' in col_name_clean:
+                sagitta_col = i
+                futil.log(f"Found Centerline Sagitta column at index {i}")
+            elif 'chord' in col_name_clean and chord_col == -1:
+                chord_col = i
+                futil.log(f"Found Chord column at index {i}")
+            elif ('h_mm' in col_name_clean or 'sagitta' in col_name_clean) and sagitta_col == -1:
+                sagitta_col = i
+                futil.log(f"Found Sagitta column at index {i}")
+            elif 'w_mm_from_widthlist' in col_name_clean or col_name_clean == 'w_mm':
+                width_col = i
+                futil.log(f"Found Width column at index {i}")
+            elif col_name_clean in ('rc_mm_center', 'rc_mm', 'rc_um', 'rc'):
+                rc_col = i
+                futil.log(f"Found Rc column at index {i}")
+            elif 'theta' in col_name_clean:
+                theta_col = i
+                futil.log(f"Found Theta column at index {i}")
+
+        futil.log(
+            f"Final column indices: Ring={ring_col}, Chord={chord_col}, Sagitta={sagitta_col}")
+
+        if ring_col == -1:
+            raise ValueError(
+                f"Could not find 'Ring' column in header. Available columns: {header}")
+        if chord_col == -1:
+            raise ValueError(
+                f"Could not find 'chord_mm' or 'chord' column in header. Available columns: {header}")
+        if sagitta_col == -1:
+            raise ValueError(
+                f"Could not find 'h_mm' or 'sagitta' column in header. Available columns: {header}")
+        if width_col == -1:
+            futil.log(
+                "Width column not found; sagitta will not be adjusted by w/2")
+
+        # Parse data rows
+        chord_values = []
+        sagitta_values = []
+
+        for line_num, line in enumerate(lines[1:], start=2):
+            if not line.strip():
+                continue
+
+            # Use the same separator we detected for the header
+            if separator == '\t':
+                cells = line.split('\t')
+            elif separator == ',':
+                cells = line.split(',')
+            elif separator == 'multi_space':
+                import re
+                cells = [col for col in re.split(
+                    r'\s{2,}', line) if col.strip()]
+            elif separator == 'single_space':
+                cells = [col for col in line.split(' ') if col.strip()]
+            elif separator == 'regex_whitespace':
+                import re
+                cells = [col for col in re.split(r'\s+', line) if col.strip()]
+            elif separator == 'known_format' or separator == 'forced_format':
+                # For known format, split on any whitespace since the columns are space-separated
+                import re
+                cells = [col for col in re.split(r'\s+', line.strip()) if col]
+            else:  # whitespace
+                cells = line.split()
+
+            # Clean up cells (remove extra whitespace)
+            cells = [cell.strip() for cell in cells if cell.strip()]
+
+            # Show first 6 cells
+            futil.log(f"Line {line_num}: {len(cells)} cells: {cells[:6]}")
+
+            if len(cells) <= max(ring_col, chord_col, sagitta_col):
+                futil.log(
+                    f"Skipping line {line_num} - not enough cells ({len(cells)} < {max(ring_col, chord_col, sagitta_col) + 1})")
+                continue  # Skip incomplete rows
+
+            try:
+                ring_num = int(cells[ring_col])
+                # Use centerline chord/sagitta directly when available
+                if chord_col != -1 and sagitta_col != -1:
+                    chord_value = float(cells[chord_col])
+                    sagitta_value = float(cells[sagitta_col])
+                else:
+                    # Fallback: recompute centerline from Rc/theta if available
+                    have_rc_theta = (rc_col != -1 and theta_col != -
+                                     1 and rc_col < len(cells) and theta_col < len(cells))
+                    # Width (optional)
+                    if width_col != -1 and width_col < len(cells):
+                        try:
+                            w_val = float(cells[width_col])
+                        except Exception:
+                            w_val = 0.0
+                    else:
+                        w_val = 0.0
+                    if have_rc_theta:
+                        try:
+                            Rc_edge = float(cells[rc_col])
+                            theta_deg = float(cells[theta_col])
+                            Rc_center = max(1e-9, Rc_edge - 0.5 * w_val)
+                            a = math.radians(theta_deg / 2.0)
+                            chord_value = 2.0 * Rc_center * math.sin(a)
+                            sagitta_value = 2.0 * Rc_center * \
+                                (1.0 - math.cos(a))
+                        except Exception:
+                            chord_value = float(
+                                cells[chord_col]) if chord_col != -1 else 0.0
+                            sagitta_value = float(
+                                cells[sagitta_col]) if sagitta_col != -1 else 0.0
+                    else:
+                        chord_value = float(
+                            cells[chord_col]) if chord_col != -1 else 0.0
+                        sagitta_value = float(
+                            cells[sagitta_col]) if sagitta_col != -1 else 0.0
+
+                futil.log(
+                    f"Parsed line {line_num}: Ring={ring_num}, Chord={chord_value}, Sagitta={sagitta_value}")
+
+                # Ensure we have enough entries in our lists
+                while len(chord_values) < ring_num:
+                    chord_values.append(0.0)
+                while len(sagitta_values) < ring_num:
+                    sagitta_values.append(0.0)
+
+                # Store values (ring numbers are 1-based, list indices are 0-based)
+                chord_values[ring_num - 1] = chord_value
+                sagitta_values[ring_num - 1] = sagitta_value
+
+            except (ValueError, IndexError) as e:
+                futil.log(
+                    f"Warning: Could not parse line {line_num}: {line} - {str(e)}")
+                continue
+
+        if not chord_values or not sagitta_values:
+            raise ValueError("No valid data rows found in table")
+
+        # Update the hidden storage inputs
+        chord_input = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('chord_values'))
+        sagitta_input = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('sagitta_values'))
+
+        if chord_input:
+            chord_input.value = ','.join([str(v) for v in chord_values])
+        if sagitta_input:
+            sagitta_input.value = ','.join([str(v) for v in sagitta_values])
+
+        # Update the height factors table to show the new values
+        update_height_factors_table(inputs)
+
+        futil.log(
+            f"Successfully parsed {len(chord_values)} chord values and {len(sagitta_values)} sagitta values")
+
+    except Exception as e:
+        futil.log(f"Error parsing table data: {str(e)}")
+        raise
 
 
 def update_per_ring_table(inputs):
@@ -1440,7 +2331,11 @@ def update_height_factors_table(inputs):
             inputs.itemById('height_factors_table'))
         config_input = adsk.core.StringValueCommandInput.cast(
             inputs.itemById('height_factors'))
-        
+        chord_config_input = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('chord_values'))
+        sagitta_config_input = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('sagitta_values'))
+
         # Get parameters needed for sagitta calculation
         length_input = adsk.core.ValueCommandInput.cast(
             inputs.itemById('length'))
@@ -1451,7 +2346,7 @@ def update_height_factors_table(inputs):
             return
 
         num_rings = num_rings_input.value
-        
+
         # Get stent length (convert from cm to mm)
         stent_length_mm = 8.0  # Default
         if length_input:
@@ -1461,16 +2356,17 @@ def update_height_factors_table(inputs):
         gap_values = []
         if gap_input and gap_input.value:
             try:
-                gap_values = [float(x.strip()) for x in gap_input.value.split(',')]
+                gap_values = [float(x.strip())
+                              for x in gap_input.value.split(',')]
             except:
                 pass
-        
+
         # Ensure we have gap values
         num_gaps = max(1, num_rings - 1)
         while len(gap_values) < num_gaps:
             gap_values.append(gap_values[-1] if gap_values else 0.16)
         gap_values = gap_values[:num_gaps]
-        
+
         total_gap_space = sum(gap_values) if num_gaps > 0 else 0.0
         available_ring_space = max(0.0, stent_length_mm - total_gap_space)
 
@@ -1488,9 +2384,28 @@ def update_height_factors_table(inputs):
             height_factors.append(1.0)
         height_factors = height_factors[:num_rings]
 
+        # Parse saved chord values
+        chord_values = []
+        if chord_config_input and chord_config_input.value:
+            try:
+                chord_values = [float(x.strip())
+                                for x in chord_config_input.value.split(',')]
+            except:
+                pass  # Ignore parsing errors
+
+        # Parse saved sagitta values
+        sagitta_values = []
+        if sagitta_config_input and sagitta_config_input.value:
+            try:
+                sagitta_values = [float(x.strip())
+                                  for x in sagitta_config_input.value.split(',')]
+            except:
+                pass  # Ignore parsing errors
+
         # Calculate scaled ring heights based on available space
         total_height_factors = sum(height_factors) if height_factors else 1.0
-        ring_scale_factor = available_ring_space / total_height_factors if total_height_factors > 0 else 1.0
+        ring_scale_factor = available_ring_space / \
+            total_height_factors if total_height_factors > 0 else 1.0
 
         # Clear existing table contents
         table_input.clear()
@@ -1500,12 +2415,15 @@ def update_height_factors_table(inputs):
             'height_header_ring', '', 'Ring', 1, True)
         header_factor = inputs.addTextBoxCommandInput(
             'height_header_factor', '', 'Height Factor', 1, True)
+        header_chord = inputs.addTextBoxCommandInput(
+            'height_header_chord', '', 'Chord (mm)', 1, True)
         header_sagitta = inputs.addTextBoxCommandInput(
             'height_header_sagitta', '', 'Sagitta (mm)', 1, True)
 
         table_input.addCommandInput(header_ring, 0, 0)
         table_input.addCommandInput(header_factor, 0, 1)
-        table_input.addCommandInput(header_sagitta, 0, 2)
+        table_input.addCommandInput(header_chord, 0, 2)
+        table_input.addCommandInput(header_sagitta, 0, 3)
 
         # Add data rows for each ring
         for ring_num in range(1, num_rings + 1):
@@ -1524,16 +2442,60 @@ def update_height_factors_table(inputs):
             factor_input.tooltip = f'Height proportion for ring {ring_num} (relative value)'
             table_input.addCommandInput(factor_input, row_index, 1)
 
-            # Calculate actual ring height and sagitta
-            scaled_ring_height_mm = default_factor * ring_scale_factor
-            # For symmetric rings, sagitta ≈ height/2
-            calculated_sagitta_mm = scaled_ring_height_mm / 2.0
-            
-            # Display calculated sagitta (read-only)
-            sagitta_display = inputs.addTextBoxCommandInput(
-                f'height_ring_{ring_num}_sagitta', '', f'{calculated_sagitta_mm:.3f}', 1, True)
-            sagitta_display.tooltip = f'Calculated sagitta for ring {ring_num} based on scaled height ({scaled_ring_height_mm:.3f} mm)'
-            table_input.addCommandInput(sagitta_display, row_index, 2)
+            # Calculate crown arc chord and sagitta (not ring axial dimensions)
+            # Get crown arc parameters for proper calculation
+            crown_arc_radius_input = adsk.core.ValueCommandInput.cast(
+                inputs.itemById('crown_arc_radius'))
+            crown_arc_angle_input = adsk.core.ValueCommandInput.cast(
+                inputs.itemById('crown_arc_angle'))
+
+            if crown_arc_radius_input and crown_arc_angle_input:
+                # Get crown arc parameters
+                crown_radius_mm = crown_arc_radius_input.value  # Already in mm
+                crown_angle_deg = crown_arc_angle_input.value   # In degrees
+
+                # Calculate crown arc chord and sagitta using the crown_apex_from_theta function
+                # Convert radius from mm to micrometers for the function
+                crown_radius_um = crown_radius_mm * 1000.0
+
+                # Calculate crown arc geometry
+                calculated_sagitta_mm, calculated_chord_mm, calculated_arc_mm = crown_apex_from_theta(
+                    crown_angle_deg, crown_radius_um)
+
+                futil.log(
+                    f'Crown arc calculation for ring {ring_num}: radius={crown_radius_mm:.3f}mm, angle={crown_angle_deg:.1f}°')
+                futil.log(
+                    f'  -> chord={calculated_chord_mm:.6f}mm, sagitta={calculated_sagitta_mm:.6f}mm')
+
+                tooltip_info = f'Crown arc: R={crown_radius_mm:.3f}mm, θ={crown_angle_deg:.1f}°, chord={calculated_chord_mm:.6f}mm'
+            else:
+                # Fallback calculation if crown arc inputs not available
+                crown_radius_mm = 0.2  # Default 200 micrometers
+                crown_angle_deg = 72.0  # Default angle
+                crown_radius_um = crown_radius_mm * 1000.0
+
+                calculated_sagitta_mm, calculated_chord_mm, calculated_arc_mm = crown_apex_from_theta(
+                    crown_angle_deg, crown_radius_um)
+
+                tooltip_info = f'Crown arc (default): R={crown_radius_mm:.3f}mm, θ={crown_angle_deg:.1f}°'
+
+            # Chord input - editable, use saved value if available, otherwise use calculated crown arc chord
+            saved_chord = chord_values[ring_num - 1] if ring_num - \
+                1 < len(chord_values) else calculated_chord_mm
+            chord_input = inputs.addValueInput(
+                f'height_ring_{ring_num}_chord', '', 'mm',
+                adsk.core.ValueInput.createByString(f'{saved_chord} mm'))
+            chord_input.tooltip = f'Crown arc chord length for ring {ring_num} (editable, in mm) - Calculated: {calculated_chord_mm:.6f}mm'
+            table_input.addCommandInput(chord_input, row_index, 2)
+
+            # Sagitta input - editable, use saved value if available, otherwise use calculated crown arc sagitta
+            saved_sagitta = sagitta_values[ring_num - 1] if ring_num - \
+                1 < len(sagitta_values) else calculated_sagitta_mm
+            sagitta_input = inputs.addValueInput(
+                f'height_ring_{ring_num}_sagitta', '', 'mm',
+                adsk.core.ValueInput.createByString(f'{saved_sagitta} mm'))
+            sagitta_input.tooltip = f'Crown arc sagitta for ring {ring_num} (editable, in mm) - Calculated: {calculated_sagitta_mm:.6f}mm from {tooltip_info}'
+            table_input.addCommandInput(sagitta_input, row_index, 3)
 
     except Exception as e:
         app = adsk.core.Application.get()
@@ -1543,7 +2505,7 @@ def update_height_factors_table(inputs):
 
 
 def update_sagitta_values_in_height_table(inputs):
-    """Update only the sagitta values in the height factors table without rebuilding the entire table"""
+    """Update the chord and sagitta values in the height factors table without rebuilding the entire table"""
     try:
         # Get required inputs
         num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
@@ -1554,12 +2516,14 @@ def update_sagitta_values_in_height_table(inputs):
             inputs.itemById('gap_between_rings'))
         config_input = adsk.core.StringValueCommandInput.cast(
             inputs.itemById('height_factors'))
+        sagitta_config_input = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('sagitta_values'))
 
         if not all([num_rings_input, length_input]):
             return
 
         num_rings = num_rings_input.value
-        
+
         # Get stent length (convert from cm to mm)
         stent_length_mm = length_input.value * 10.0  # cm to mm
 
@@ -1567,16 +2531,17 @@ def update_sagitta_values_in_height_table(inputs):
         gap_values = []
         if gap_input and gap_input.value:
             try:
-                gap_values = [float(x.strip()) for x in gap_input.value.split(',')]
+                gap_values = [float(x.strip())
+                              for x in gap_input.value.split(',')]
             except:
                 pass
-        
+
         # Ensure we have gap values
         num_gaps = max(1, num_rings - 1)
         while len(gap_values) < num_gaps:
             gap_values.append(gap_values[-1] if gap_values else 0.16)
         gap_values = gap_values[:num_gaps]
-        
+
         total_gap_space = sum(gap_values) if num_gaps > 0 else 0.0
         available_ring_space = max(0.0, stent_length_mm - total_gap_space)
 
@@ -1584,7 +2549,8 @@ def update_sagitta_values_in_height_table(inputs):
         height_factors = []
         if config_input and config_input.value:
             try:
-                height_factors = [float(x.strip()) for x in config_input.value.split(',')]
+                height_factors = [float(x.strip())
+                                  for x in config_input.value.split(',')]
             except:
                 pass
 
@@ -1595,7 +2561,17 @@ def update_sagitta_values_in_height_table(inputs):
 
         # Calculate scaling factor
         total_height_factors = sum(height_factors) if height_factors else 1.0
-        ring_scale_factor = available_ring_space / total_height_factors if total_height_factors > 0 else 1.0
+        ring_scale_factor = available_ring_space / \
+            total_height_factors if total_height_factors > 0 else 1.0
+
+        # Parse any user-provided sagitta values (mm)
+        user_sagittas = []
+        if sagitta_config_input and sagitta_config_input.value:
+            try:
+                user_sagittas = [float(x.strip())
+                                 for x in sagitta_config_input.value.split(',')]
+            except:
+                user_sagittas = []
 
         # Update sagitta values for each ring
         for ring_num in range(1, num_rings + 1):
@@ -1606,24 +2582,106 @@ def update_sagitta_values_in_height_table(inputs):
                 if factor_input:
                     current_factor = factor_input.value
                 else:
-                    current_factor = height_factors[ring_num - 1] if ring_num - 1 < len(height_factors) else 1.0
+                    current_factor = height_factors[ring_num -
+                                                    1] if ring_num - 1 < len(height_factors) else 1.0
 
                 # Calculate actual ring height and sagitta
                 scaled_ring_height_mm = current_factor * ring_scale_factor
-                calculated_sagitta_mm = scaled_ring_height_mm / 2.0
+                # Do not overwrite chord here; chord is user/paste-defined crown arc chord
 
-                # Update sagitta display
-                sagitta_display = adsk.core.TextBoxCommandInput.cast(
+                # If user provided sagitta for this ring, keep it and skip recalculation
+                sagitta_input = adsk.core.ValueCommandInput.cast(
                     inputs.itemById(f'height_ring_{ring_num}_sagitta'))
-                if sagitta_display:
-                    sagitta_display.text = f'{calculated_sagitta_mm:.3f}'
-                    sagitta_display.tooltip = f'Calculated sagitta for ring {ring_num} based on scaled height ({scaled_ring_height_mm:.3f} mm)'
+                if ring_num - 1 < len(user_sagittas) and user_sagittas[ring_num - 1] > 0:
+                    if sagitta_input:
+                        try:
+                            sagitta_input.expression = f"{user_sagittas[ring_num - 1]} mm"
+                        except:
+                            # cm fallback
+                            sagitta_input.value = user_sagittas[ring_num - 1] / 10.0
+                    continue
+
+                # Get crown arc radius for proper sagitta calculation
+                crown_arc_radius_input = adsk.core.ValueCommandInput.cast(
+                    inputs.itemById('crown_arc_radius'))
+                if crown_arc_radius_input:
+                    # Check what units the crown arc radius actually uses
+                    crown_radius_mm = crown_arc_radius_input.value  # Try without conversion first
+
+                    # Calculate sagitta using geometric formula: sagitta = R - sqrt(R² - (chord/2)²)
+                    # For a circular arc, chord = ring height, radius = crown arc radius
+                    chord_mm = scaled_ring_height_mm
+                    if crown_radius_mm > 0 and chord_mm > 0 and chord_mm <= 2 * crown_radius_mm:
+                        # Valid geometric case
+                        half_chord = chord_mm / 2.0
+                        discriminant = crown_radius_mm * crown_radius_mm - half_chord * half_chord
+                        if discriminant >= 0:
+                            calculated_sagitta_mm = crown_radius_mm - \
+                                math.sqrt(discriminant)
+                        else:
+                            # Fallback for invalid geometry
+                            calculated_sagitta_mm = chord_mm / 8.0  # Approximate for shallow arcs
+                    else:
+                        # Fallback for invalid geometry
+                        calculated_sagitta_mm = chord_mm / 8.0  # Approximate for shallow arcs
+                    tooltip_info = f'Calculated sagitta for ring {ring_num}: {calculated_sagitta_mm:.6f} mm (geometric: R={crown_radius_mm:.3f}mm, chord={scaled_ring_height_mm:.3f}mm)'
+                else:
+                    # Fallback if crown arc radius not available
+                    calculated_sagitta_mm = scaled_ring_height_mm / 8.0
+                    tooltip_info = f'Calculated sagitta for ring {ring_num}: {calculated_sagitta_mm:.6f} mm (fallback: height/8)'
+
+                # Update sagitta input (use expression with units to avoid cm/mm confusion)
+                if sagitta_input:
+                    try:
+                        sagitta_input.expression = f'{calculated_sagitta_mm} mm'
+                    except:
+                        sagitta_input.value = calculated_sagitta_mm / 10.0  # cm fallback
+                    sagitta_input.tooltip = f'Sagitta for ring {ring_num} (editable, in mm) - Default: {calculated_sagitta_mm:.6f}'
 
             except Exception as e:
-                futil.log(f'Error updating sagitta for ring {ring_num}: {str(e)}')
+                futil.log(
+                    f'Error updating sagitta for ring {ring_num}: {str(e)}')
 
     except Exception as e:
         futil.log(f'Error updating sagitta values: {str(e)}')
+
+    # Sync current table values back to hidden inputs for persistence
+    try:
+        config_h = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('height_factors'))
+        config_c = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('chord_values'))
+        config_s = adsk.core.StringValueCommandInput.cast(
+            inputs.itemById('sagitta_values'))
+        num_rings_input = adsk.core.IntegerSpinnerCommandInput.cast(
+            inputs.itemById('num_rings'))
+        if num_rings_input:
+            n = num_rings_input.value
+            factors, chords, sagittas = [], [], []
+            for ring_num in range(1, n + 1):
+                try:
+                    f_in = adsk.core.ValueCommandInput.cast(
+                        inputs.itemById(f'height_ring_{ring_num}_factor'))
+                    c_in = adsk.core.ValueCommandInput.cast(
+                        inputs.itemById(f'height_ring_{ring_num}_chord'))
+                    s_in = adsk.core.ValueCommandInput.cast(
+                        inputs.itemById(f'height_ring_{ring_num}_sagitta'))
+                    if f_in:
+                        factors.append(str(f_in.value))
+                    if c_in:
+                        chords.append(str(c_in.value * 10.0))  # cm -> mm
+                    if s_in:
+                        sagittas.append(str(s_in.value * 10.0))  # cm -> mm
+                except:
+                    pass
+            if config_h and factors:
+                config_h.value = ', '.join(factors)
+            if config_c and chords:
+                config_c.value = ', '.join(chords)
+            if config_s and sagittas:
+                config_s.value = ', '.join(sagittas)
+    except:
+        pass
 
 
 def update_gap_config_table(inputs):
@@ -1815,7 +2873,7 @@ def update_height_factors_from_table(inputs):
 
             # Update the text configuration
             config_input.value = ', '.join(height_factors)
-            
+
             # Update sagitta values since height factors changed
             update_sagitta_values_in_height_table(inputs)
 
@@ -2225,10 +3283,10 @@ def command_validate_input(args: adsk.core.ValidateInputsEventArgs):
 
 def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                      height_factors, gap_values, draw_border, draw_gap_centerlines, gap_centerlines_interior_only,
-                     draw_crown_peaks, draw_crown_waves, draw_crown_midlines, draw_crown_h_midlines,
+                     draw_crown_peaks, draw_crown_waves, draw_crown_midlines, draw_crown_h_midlines, draw_crown_chord_lines,
                      partial_crown_midlines, draw_crown_quarters, partial_crown_quarters, create_coincident_points,
                      draw_fold_lock_limits, fold_lock_columns, per_ring_fold_lock_config,
-                     balloon_wall_um):
+                     balloon_wall_um, chord_values=None, sagitta_values=None):
     """Draw stent frame based on parameters using optimized calculations"""
     import math
 
@@ -2243,7 +3301,8 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
 
         root = design.rootComponent
         sk = root.sketches.add(root.xYConstructionPlane)
-        sk.name = f'Stent Frame - {num_rings} rings, {crowns_per_ring} crowns'
+        waves_per_ring = max(1, crowns_per_ring // 2)
+        sk.name = f'Stent Frame - {num_rings} rings, {waves_per_ring} waves ({crowns_per_ring} crowns)'
 
         # Convert mm to cm for Fusion API
         def mm_to_cm(x):
@@ -2290,11 +3349,21 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
             ring_start_lines.append(ring_start)
             ring_end_lines.append(ring_end)
 
-        # Calculate gap center positions (between ring end and next ring start)
+        # Calculate gap center positions (including first and last gaps)
         gap_centers = []
+
+        # First gap: from Y=0 to start of first ring
+        first_gap_center = (0.0 + ring_start_lines[0]) / 2
+        gap_centers.append(first_gap_center)
+
+        # Middle gaps: between ring end and next ring start
         for i in range(num_rings - 1):
             gap_center_y = (ring_end_lines[i] + ring_start_lines[i+1]) / 2
             gap_centers.append(gap_center_y)
+
+        # Last gap: from end of last ring to total length
+        last_gap_center = (ring_end_lines[-1] + length_mm) / 2
+        gap_centers.append(last_gap_center)
 
         # Use the specified length as total length
         total_length = length_mm
@@ -2363,7 +3432,7 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
         if draw_gap_centerlines and num_rings > 1:
             if gap_centerlines_interior_only and num_rings > 2:
                 # Only draw interior gap lines (skip first and last gaps)
-                # For N rings: gaps 1 to N-2 (skipping gap 0 and gap N-1)
+                # Skip gap_centers[0] (before first ring) and gap_centers[-1] (after last ring)
                 interior_gap_centers = gap_centers[1:-
                                                    1] if len(gap_centers) > 2 else []
                 for gap_center in interior_gap_centers:
@@ -2385,12 +3454,13 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                     )
                     line.isConstruction = True
 
-        # Draw crown wave lines (vertical divisions) - no gaps at start and end
+        # Draw wave lines (vertical divisions at wave boundaries)
         if draw_crown_waves:
-            crown_spacing = width_mm / crowns_per_ring
-            # Draw lines for each crown wave (between crowns, not at edges)
-            for i in range(1, crowns_per_ring):
-                x = i * crown_spacing
+            waves = max(1, crowns_per_ring // 2)
+            wave_spacing = width_mm / waves
+            # Draw lines for each wave boundary (not at edges)
+            for i in range(1, waves):
+                x = i * wave_spacing
                 line = lines.addByTwoPoints(
                     adsk.core.Point3D.create(mm_to_cm(x), mm_to_cm(0.0), 0),
                     adsk.core.Point3D.create(
@@ -2398,21 +3468,22 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                 )
                 line.isConstruction = True
 
-        # Draw crown wave midlines (vertical lines at midpoint between crown waves)
+        # Draw wave midlines (vertical lines at midpoint within each wave)
         if draw_crown_midlines or partial_crown_midlines > 0:
-            crown_spacing = width_mm / crowns_per_ring
+            waves = max(1, crowns_per_ring // 2)
+            wave_spacing = width_mm / waves
             # Determine how many crowns to draw midlines for
             if partial_crown_midlines > 0:
                 # Use partial count (limited from left)
-                midlines_count = min(partial_crown_midlines, crowns_per_ring)
+                midlines_count = min(partial_crown_midlines, waves)
             else:
                 # Use full count if partial is 0 and main option is enabled
-                midlines_count = crowns_per_ring if draw_crown_midlines else 0
+                midlines_count = waves if draw_crown_midlines else 0
 
             # Draw midlines for the specified number of crowns from left
             for i in range(midlines_count):
                 # Midline at the center of each crown section
-                x = i * crown_spacing + crown_spacing / 2
+                x = i * wave_spacing + wave_spacing / 2
 
                 line = lines.addByTwoPoints(
                     adsk.core.Point3D.create(mm_to_cm(x), mm_to_cm(0.0), 0),
@@ -2421,7 +3492,7 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                 )
                 line.isConstruction = True
 
-        # Draw crown horizontal midlines (horizontal lines at midpoint of each crown height)
+        # Draw crown horizontal midlines (horizontal lines at midpoint of each ring height)
         if draw_crown_h_midlines:
             # Draw horizontal midlines at each ring center
             for center in ring_centers:
@@ -2432,6 +3503,96 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                         mm_to_cm(width_mm), mm_to_cm(center), 0)
                 )
                 line.isConstruction = True
+
+        # Removed drawing sagitta guide lines. Chord lines will indicate sagitta positions instead.
+
+        # Draw crown chord lines positioned at sagitta distance from crown tips
+        if draw_crown_chord_lines:
+            crown_spacing = width_mm / crowns_per_ring
+
+            # Precompute sagitta per ring (from table or fallback geometry)
+            ring_sagittas = []
+            for i in range(num_rings):
+                ring_height = scaled_ring_heights[i]
+                if sagitta_values and i < len(sagitta_values):
+                    s_val = sagitta_values[i]
+                    print(
+                        f"Ring {i+1}: Using user-defined sagitta={s_val:.3f}mm")
+                else:
+                    crown_arc_radius_mm = 0.2  # Default crown arc radius
+                    if crown_arc_radius_mm > 0 and ring_height > 0 and ring_height <= 2 * crown_arc_radius_mm:
+                        half_chord = ring_height / 2.0
+                        discriminant = crown_arc_radius_mm * crown_arc_radius_mm - half_chord * half_chord
+                        if discriminant >= 0:
+                            s_val = crown_arc_radius_mm - \
+                                math.sqrt(discriminant)
+                        else:
+                            s_val = ring_height / 16.4
+                    else:
+                        s_val = ring_height / 16.4
+                    print(
+                        f"Ring {i+1}: Using calculated sagitta={s_val:.3f}mm")
+                ring_sagittas.append(s_val)
+
+            # Draw chord lines for each ring
+            for i in range(num_rings):
+                ring_height = scaled_ring_heights[i]
+                ring_center = ring_centers[i]
+
+                # Use user-provided chord value if available, otherwise calculate
+                if chord_values and i < len(chord_values):
+                    # Use user-edited chord value from table
+                    chord_mm = chord_values[i]
+                    print(
+                        f"Ring {i+1}: Using user-defined chord={chord_mm:.3f}mm")
+                else:
+                    # Fallback: calculate chord using crown arc parameters
+                    crown_arc_radius_mm = 0.2  # Default crown arc radius
+                    crown_angle_deg = 72.0  # Default crown angle
+                    crown_radius_um = crown_arc_radius_mm * 1000.0
+                    sagitta_calc, chord_calc, arc_calc = crown_apex_from_theta(
+                        crown_angle_deg, crown_radius_um)
+                    chord_mm = chord_calc
+                    print(
+                        f"Ring {i+1}: Using calculated chord={chord_mm:.3f}mm")
+
+                # Draw chord lines for each crown in this ring
+                for crown_index in range(crowns_per_ring):
+                    # Calculate crown center position
+                    crown_center_x = (crown_index + 0.5) * crown_spacing
+
+                    # Calculate chord start and end positions (centered on crown)
+                    chord_half_length = chord_mm / 2.0
+                    chord_start_x = crown_center_x - chord_half_length
+                    chord_end_x = crown_center_x + chord_half_length
+
+                    # Place a single chord per crown:
+                    # - First half of crowns are 'up' (near top tip)
+                    # - Second half are 'down' (near bottom tip)
+                    # - Alternate the pattern per ring index so adjacent rings are opposite
+                    sagitta_mm = ring_sagittas[i]
+                    chord_y_top = ring_center + ring_height/2 - sagitta_mm
+                    chord_y_bottom = ring_center - ring_height/2 + sagitta_mm
+
+                    # Orientation per wave: within each wave (2 crowns), first crown up, second down; flip per ring
+                    wave_index = crown_index // 2
+                    is_first_in_wave = (crown_index % 2 == 0)
+                    # even rings: first in wave up; odd: first in wave down
+                    up_first = (i % 2 == 0)
+                    is_up = is_first_in_wave if up_first else (
+                        not is_first_in_wave)
+                    chord_y = chord_y_top if is_up else chord_y_bottom
+                    orientation = 'up' if is_up else 'down'
+
+                    print(
+                        f"  Crown {crown_index+1} ({orientation}): chord x={chord_start_x:.3f}-{chord_end_x:.3f} at y={chord_y:.3f}mm")
+                    line = lines.addByTwoPoints(
+                        adsk.core.Point3D.create(
+                            mm_to_cm(chord_start_x), mm_to_cm(chord_y), 0),
+                        adsk.core.Point3D.create(
+                            mm_to_cm(chord_end_x), mm_to_cm(chord_y), 0)
+                    )
+                    line.isConstruction = True
 
         # Draw crown quarter lines (vertical lines at 1/4 and 3/4 positions within each crown)
         if draw_crown_quarters or partial_crown_quarters > 0:
@@ -2536,14 +3697,15 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                 len([r for r in ring_end_lines if 0 < r < total_length]) + \
                 len(gap_centers)
 
-            # Count crown waves and midlines
-            crown_waves_count = crowns_per_ring - 1 if draw_crown_waves else 0
+            # Count wave boundary lines and midlines
+            waves = max(1, crowns_per_ring // 2)
+            crown_waves_count = (waves - 1) if draw_crown_waves else 0
 
             # Count actual midlines drawn (partial or full)
             if partial_crown_midlines > 0:
-                midlines_count = min(partial_crown_midlines, crowns_per_ring)
+                midlines_count = min(partial_crown_midlines, waves)
             else:
-                midlines_count = crowns_per_ring if draw_crown_midlines else 0
+                midlines_count = waves if draw_crown_midlines else 0
 
             h_midlines_count = num_rings if draw_crown_h_midlines else 0
 
@@ -2593,20 +3755,22 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                     if draw_border:
                         vertical_lines.extend([0.0, width_mm])
 
-                    # Add crown wave lines
+                    # Add wave boundary lines
                     if draw_crown_waves:
-                        crown_width = width_mm / crowns_per_ring
-                        # Only add lines that are actually drawn (between crowns, not at borders)
-                        for crown in range(1, crowns_per_ring):
-                            x = crown * crown_width
+                        waves = max(1, crowns_per_ring // 2)
+                        wave_width = width_mm / waves
+                        # Only add lines that are actually drawn (between waves, not at borders)
+                        for w in range(1, waves):
+                            x = w * wave_width
                             vertical_lines.append(x)
 
-                    # Add crown midlines (full or partial)
+                    # Add wave midlines (full or partial)
                     if draw_crown_midlines or partial_crown_midlines > 0:
-                        crown_width = width_mm / crowns_per_ring
-                        midlines_to_draw = partial_crown_midlines if partial_crown_midlines > 0 else crowns_per_ring
-                        for crown in range(min(midlines_to_draw, crowns_per_ring)):
-                            midline_x = (crown + 0.5) * crown_width
+                        waves = max(1, crowns_per_ring // 2)
+                        wave_width = width_mm / waves
+                        midlines_to_draw = partial_crown_midlines if partial_crown_midlines > 0 else waves
+                        for w in range(min(midlines_to_draw, waves)):
+                            midline_x = (w + 0.5) * wave_width
                             vertical_lines.append(midline_x)
 
                     # Add crown quarter lines (full or partial)
@@ -2717,19 +3881,20 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                 except Exception as e:
                     futil.log(f'Error creating coincident points: {str(e)}')
 
+            waves = max(1, crowns_per_ring // 2)
             ui.messageBox(
                 f'Stent frame created successfully!\n'
                 f'• Diameter: {diameter_mm:.3f} mm\n'
                 f'• Length: {length_mm:.3f} mm\n'
                 f'• Width (circumference): {width_mm:.3f} mm\n'
                 f'• Rings: {num_rings}\n'
-                f'• Crowns per ring: {crowns_per_ring}\n'
+                f'• Waves per ring: {waves} (crowns: {crowns_per_ring})\n'
                 f'• Scaled ring heights: {[f"{h:.3f}" for h in scaled_ring_heights]}\n'
                 f'• Gap values: {[f"{g:.3f}" for g in gap_values[:num_gaps]]} mm\n'
                 f'• Ring scale factor: {ring_scale_factor:.3f}\n'
                 f'• Horizontal lines inside box: {lines_inside_box}\n'
-                f'• Vertical crown waves: {crown_waves_count}\n'
-                f'• Vertical crown midlines: {midlines_count}\n'
+                f'• Vertical wave boundaries: {crown_waves_count}\n'
+                f'• Vertical wave midlines: {midlines_count}\n'
                 f'• Vertical crown quarter lines: {quarters_count}\n'
                 f'• Horizontal crown midlines: {h_midlines_count}\n'
                 f'• Coincident points created: {points_created}\n'
