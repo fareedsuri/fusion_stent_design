@@ -131,16 +131,16 @@ The Stent Frame Designer is a Fusion 360 add-in that creates parametric stent fr
 - **Use Case:** Gradual detail increase, asymmetric designs
 - **Rule:** When > 0, overrides the full midlines option
 
-### Crown Quarter Lines
+### Crown Mid Lines (Wave Quarter Lines)
 - **Default:** Disabled
-- **Description:** Vertical lines at 1/4 and 3/4 positions in each crown
-- **Lines Created:** 2 lines per crown
+- **Description:** Vertical lines at the center of each crown (wave quarter lines)
+- **Lines Created:** 1 line per crown
 
-### Crown Quarter Lines Count (from left)
+### Crown Mid Lines Count (from left)
 - **Range:** 0 - 20
 - **Default:** 0 (disabled)
-- **Description:** Add quarter lines to only the first N crowns
-- **Rule:** When > 0, overrides the full quarter lines option
+- **Description:** Add mid lines to only the first N crowns
+- **Rule:** When > 0, overrides the full mid lines option
 
 ---
 

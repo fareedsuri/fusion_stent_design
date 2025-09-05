@@ -61,8 +61,8 @@ last_used_values = {
     'draw_crown_h_midlines': False,
     'draw_crown_chord_lines': True,
     'partial_crown_midlines': 0,
-    'draw_crown_quarters': False,
-    'partial_crown_quarters': 0,
+    'draw_crown_mids': False,
+    'partial_crown_mids': 0,
     'create_coincident_points': False,
 
     # Fold‑lock (ends only)
@@ -106,8 +106,8 @@ default_values = {
     'draw_crown_h_midlines': False,
     'draw_crown_chord_lines': True,
     'partial_crown_midlines': 0,
-    'draw_crown_quarters': False,
-    'partial_crown_quarters': 0,
+    'draw_crown_mids': False,
+    'partial_crown_mids': 0,
     'create_coincident_points': False,
     # Fold-lock options
     'use_fold_lock_table': False,
@@ -811,15 +811,15 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
         'partial_crown_midlines', 'Crown Midlines Count (from left)', 0, 20, 1, last_used_values['partial_crown_midlines'])
     partial_midlines_input.tooltip = 'Number of crowns from left to add midline vertical lines (0 = use full midlines option above)'
 
-    # Crown quarter lines option - load from saved values
-    quarter_lines_input = draw_inputs.addBoolValueInput(
-        'draw_crown_quarters', 'Draw Crown Quarter Lines', True, '', last_used_values['draw_crown_quarters'])
-    quarter_lines_input.tooltip = 'Draw vertical lines at 1/4 and 3/4 positions within each crown section'
+    # Crown mid lines option - load from saved values
+    mid_lines_input = draw_inputs.addBoolValueInput(
+        'draw_crown_mids', 'Draw Crown Mid Lines (Wave Quarter Lines)', True, '', last_used_values.get('draw_crown_mids', last_used_values.get('draw_crown_quarters', True)))
+    mid_lines_input.tooltip = 'Draw vertical lines at the center of each crown section (wave quarter lines)'
 
-    # Partial crown quarter lines control - load from saved values
-    partial_quarters_input = draw_inputs.addIntegerSpinnerCommandInput(
-        'partial_crown_quarters', 'Crown Quarter Lines Count (from left)', 0, 20, 1, last_used_values['partial_crown_quarters'])
-    partial_quarters_input.tooltip = 'Number of crowns from left to add quarter vertical lines (0 = use full quarter lines option above)'
+    # Partial crown mid lines control - load from saved values
+    partial_mids_input = draw_inputs.addIntegerSpinnerCommandInput(
+        'partial_crown_mids', 'Crown Mid Lines Count (from left)', 0, 20, 1, last_used_values.get('partial_crown_mids', last_used_values.get('partial_crown_quarters', 0)))
+    partial_mids_input.tooltip = 'Number of crowns from left to add mid vertical lines (0 = use full mid lines option above)'
 
     # Coincident points option - load from saved values
     coincident_points_input = draw_inputs.addBoolValueInput(
@@ -1009,10 +1009,10 @@ def command_execute(args: adsk.core.CommandEventArgs):
         inputs.itemById('draw_crown_chord_lines'))
     partial_crown_midlines_input = adsk.core.IntegerSpinnerCommandInput.cast(
         inputs.itemById('partial_crown_midlines'))
-    draw_crown_quarters_input = adsk.core.BoolValueCommandInput.cast(
-        inputs.itemById('draw_crown_quarters'))
-    partial_crown_quarters_input = adsk.core.IntegerSpinnerCommandInput.cast(
-        inputs.itemById('partial_crown_quarters'))
+    draw_crown_mids_input = adsk.core.BoolValueCommandInput.cast(
+        inputs.itemById('draw_crown_mids'))
+    partial_crown_mids_input = adsk.core.IntegerSpinnerCommandInput.cast(
+        inputs.itemById('partial_crown_mids'))
     coincident_points_input = adsk.core.BoolValueCommandInput.cast(
         inputs.itemById('create_coincident_points'))
 
@@ -1070,8 +1070,10 @@ def command_execute(args: adsk.core.CommandEventArgs):
         # sagitta lines default reset removed
         draw_crown_chord_lines_input.value = default_values['draw_crown_chord_lines']
         partial_crown_midlines_input.value = default_values['partial_crown_midlines']
-        draw_crown_quarters_input.value = default_values['draw_crown_quarters']
-        partial_crown_quarters_input.value = default_values['partial_crown_quarters']
+        draw_crown_mids_input.value = default_values.get(
+            'draw_crown_mids', default_values.get('draw_crown_quarters', False))
+        partial_crown_mids_input.value = default_values.get(
+            'partial_crown_mids', default_values.get('partial_crown_quarters', 0))
         coincident_points_input.value = default_values['create_coincident_points']
 
         # Reset fold-lock specific inputs
@@ -1209,8 +1211,8 @@ def command_execute(args: adsk.core.CommandEventArgs):
     # sagitta lines flag removed
     draw_crown_chord_lines = draw_crown_chord_lines_input.value
     partial_crown_midlines = partial_crown_midlines_input.value
-    draw_crown_quarters = draw_crown_quarters_input.value
-    partial_crown_quarters = partial_crown_quarters_input.value
+    draw_crown_mids = draw_crown_mids_input.value
+    partial_crown_mids = partial_crown_mids_input.value
     create_coincident_points = coincident_points_input.value
 
     # Fold-lock values
@@ -1293,8 +1295,8 @@ def command_execute(args: adsk.core.CommandEventArgs):
         # sagitta lines flag removed
         'draw_crown_chord_lines': draw_crown_chord_lines,
         'partial_crown_midlines': partial_crown_midlines,
-        'draw_crown_quarters': draw_crown_quarters,
-        'partial_crown_quarters': partial_crown_quarters,
+        'draw_crown_mids': draw_crown_mids,
+        'partial_crown_mids': partial_crown_mids,
         'create_coincident_points': create_coincident_points,
         'gap_centerlines_interior_only': gap_centerlines_interior_only,
         'use_fold_lock_table': use_fold_lock_table,
@@ -1308,7 +1310,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
     draw_stent_frame(diameter, length, num_rings, crowns_per_ring,
                      height_factors, gap_values, draw_border, draw_gap_centerlines, gap_centerlines_interior_only,
                      draw_crown_peaks, draw_crown_waves, draw_crown_midlines, draw_crown_h_midlines, draw_crown_chord_lines,
-                     partial_crown_midlines, draw_crown_quarters, partial_crown_quarters, create_coincident_points,
+                     partial_crown_midlines, draw_crown_mids, partial_crown_mids, create_coincident_points,
                      draw_fold_lock_limits, fold_lock_columns, per_ring_fold_lock_config,
                      balloon_wall_um, chord_values_list, sagitta_values_list)
 
@@ -3284,7 +3286,7 @@ def command_validate_input(args: adsk.core.ValidateInputsEventArgs):
 def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                      height_factors, gap_values, draw_border, draw_gap_centerlines, gap_centerlines_interior_only,
                      draw_crown_peaks, draw_crown_waves, draw_crown_midlines, draw_crown_h_midlines, draw_crown_chord_lines,
-                     partial_crown_midlines, draw_crown_quarters, partial_crown_quarters, create_coincident_points,
+                     partial_crown_midlines, draw_crown_mids, partial_crown_mids, create_coincident_points,
                      draw_fold_lock_limits, fold_lock_columns, per_ring_fold_lock_config,
                      balloon_wall_um, chord_values=None, sagitta_values=None):
     """Draw stent frame based on parameters using optimized calculations"""
@@ -3594,36 +3596,26 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                     )
                     line.isConstruction = True
 
-        # Draw crown quarter lines (vertical lines at 1/4 and 3/4 positions within each crown)
-        if draw_crown_quarters or partial_crown_quarters > 0:
+        # Draw crown mid lines (vertical lines at center of each crown - wave quarter lines)
+        if draw_crown_mids or partial_crown_mids > 0:
             crown_spacing = width_mm / crowns_per_ring
-            # Determine how many crowns to draw quarter lines for
-            if partial_crown_quarters > 0:
+            # Determine how many crowns to draw mid lines for
+            if partial_crown_mids > 0:
                 # Use partial count (limited from left)
-                quarters_count = min(partial_crown_quarters, crowns_per_ring)
+                mids_count = min(partial_crown_mids, crowns_per_ring)
             else:
                 # Use full count if partial is 0 and main option is enabled
-                quarters_count = crowns_per_ring if draw_crown_quarters else 0
+                mids_count = crowns_per_ring if draw_crown_mids else 0
 
-            # Draw quarter lines for the specified number of crowns from left
-            for i in range(quarters_count):
-                # Quarter line at 1/4 position
-                x_quarter = i * crown_spacing + crown_spacing / 4
+            # Draw mid lines for the specified number of crowns from left
+            for i in range(mids_count):
+                # Mid line at center position (wave quarter line)
+                x_mid = i * crown_spacing + crown_spacing / 2
                 line = lines.addByTwoPoints(
                     adsk.core.Point3D.create(
-                        mm_to_cm(x_quarter), mm_to_cm(0.0), 0),
+                        mm_to_cm(x_mid), mm_to_cm(0.0), 0),
                     adsk.core.Point3D.create(
-                        mm_to_cm(x_quarter), mm_to_cm(total_length), 0)
-                )
-                line.isConstruction = True
-
-                # Quarter line at 3/4 position
-                x_three_quarter = i * crown_spacing + 3 * crown_spacing / 4
-                line = lines.addByTwoPoints(
-                    adsk.core.Point3D.create(
-                        mm_to_cm(x_three_quarter), mm_to_cm(0.0), 0),
-                    adsk.core.Point3D.create(
-                        mm_to_cm(x_three_quarter), mm_to_cm(total_length), 0)
+                        mm_to_cm(x_mid), mm_to_cm(total_length), 0)
                 )
                 line.isConstruction = True
 
@@ -3709,14 +3701,12 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
 
             h_midlines_count = num_rings if draw_crown_h_midlines else 0
 
-            # Count actual quarter lines drawn (partial or full)
-            if partial_crown_quarters > 0:
-                # 2 lines per crown
-                quarters_count = min(
-                    partial_crown_quarters, crowns_per_ring) * 2
+            # Count actual mid lines drawn (partial or full)
+            if partial_crown_mids > 0:
+                # 1 line per crown
+                mids_count = min(partial_crown_mids, crowns_per_ring)
             else:
-                quarters_count = (crowns_per_ring *
-                                  2) if draw_crown_quarters else 0
+                mids_count = crowns_per_ring if draw_crown_mids else 0
 
             # Create coincident points at line intersections if requested
             points_created = 0
@@ -3773,14 +3763,13 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                             midline_x = (w + 0.5) * wave_width
                             vertical_lines.append(midline_x)
 
-                    # Add crown quarter lines (full or partial)
-                    if draw_crown_quarters or partial_crown_quarters > 0:
+                    # Add crown mid lines (full or partial)
+                    if draw_crown_mids or partial_crown_mids > 0:
                         crown_width = width_mm / crowns_per_ring
-                        quarters_to_draw = partial_crown_quarters if partial_crown_quarters > 0 else crowns_per_ring
-                        for crown in range(min(quarters_to_draw, crowns_per_ring)):
-                            quarter1_x = (crown + 0.25) * crown_width
-                            quarter3_x = (crown + 0.75) * crown_width
-                            vertical_lines.extend([quarter1_x, quarter3_x])
+                        mids_to_draw = partial_crown_mids if partial_crown_mids > 0 else crowns_per_ring
+                        for crown in range(min(mids_to_draw, crowns_per_ring)):
+                            mid_x = (crown + 0.5) * crown_width
+                            vertical_lines.append(mid_x)
 
                     # Create points at all intersections and add coincident constraints
                     created_points = []
@@ -3895,7 +3884,7 @@ def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
                 f'• Horizontal lines inside box: {lines_inside_box}\n'
                 f'• Vertical wave boundaries: {crown_waves_count}\n'
                 f'• Vertical wave midlines: {midlines_count}\n'
-                f'• Vertical crown quarter lines: {quarters_count}\n'
+                f'• Vertical crown mid lines: {mids_count}\n'
                 f'• Horizontal crown midlines: {h_midlines_count}\n'
                 f'• Coincident points created: {points_created}\n'
                 f'• Coincident constraints created: {constraints_created}'
