@@ -21,12 +21,39 @@ commands = [
 # Assumes you defined a "start" function in each of your modules.
 # The start function will be run when the add-in is started.
 def start():
-    for command in commands:
-        command.start()
+    try:
+        # Import fusion utilities for logging
+        from ..lib import fusionAddInUtils as futil
+        futil.log('Starting all commands...')
+        
+        for i, command in enumerate(commands):
+            try:
+                futil.log(f'Starting command {i+1}: {getattr(command, "CMD_NAME", "Unknown")}')
+                command.start()
+                futil.log(f'Successfully started command {i+1}')
+            except Exception as e:
+                futil.log(f'Error starting command {i+1}: {str(e)}')
+                import traceback
+                futil.log(traceback.format_exc())
+                
+        futil.log('Finished starting all commands')
+    except Exception as e:
+        print(f'Error in commands.start(): {str(e)}')
 
 
 # Assumes you defined a "stop" function in each of your modules.
 # The stop function will be run when the add-in is stopped.
 def stop():
-    for command in commands:
-        command.stop()
+    try:
+        from ..lib import fusionAddInUtils as futil
+        futil.log('Stopping all commands...')
+        
+        for command in commands:
+            try:
+                command.stop()
+            except Exception as e:
+                futil.log(f'Error stopping command: {str(e)}')
+                
+        futil.log('Finished stopping all commands')
+    except Exception as e:
+        print(f'Error in commands.stop(): {str(e)}')

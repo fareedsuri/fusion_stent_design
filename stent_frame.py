@@ -7,12 +7,12 @@ import math
 import traceback
 
 # Global variables to store modules
-cmdDialog = None
+commands = None
 
 try:
     import adsk.core
     import adsk.fusion
-    from .commands.commandDialog import entry as cmdDialog
+    from . import commands
 except Exception:
     # Try alternative import for when running as script
     try:
@@ -24,7 +24,7 @@ except Exception:
         if current_dir not in sys.path:
             sys.path.append(current_dir)
 
-        from commands.commandDialog import entry as cmdDialog
+        import commands
     except Exception:
         pass
 
@@ -37,24 +37,24 @@ def mm_to_cm(x):
 
 
 def run(context):
-    """Main entry point - starts the command dialog"""
-    global cmdDialog
+    """Main entry point - starts all commands"""
+    global commands
 
-    if cmdDialog is None:
+    if commands is None:
         try:
             # Try to import again if it failed initially
-            from .commands.commandDialog import entry as cmdDialog
+            from . import commands
         except Exception:
             try:
-                from commands.commandDialog import entry as cmdDialog
+                import commands
             except Exception:
                 pass
 
     try:
-        if cmdDialog:
-            cmdDialog.start()
+        if commands:
+            commands.start()
         else:
-            raise Exception("Could not import command dialog module")
+            raise Exception("Could not import commands module")
     except Exception as e:
         ui = None
         try:
@@ -72,9 +72,9 @@ def run(context):
 
 def stop(context):
     """Stop the add-in"""
-    global cmdDialog
+    global commands
     try:
-        if cmdDialog:
-            cmdDialog.stop()
+        if commands:
+            commands.stop()
     except Exception:
         pass

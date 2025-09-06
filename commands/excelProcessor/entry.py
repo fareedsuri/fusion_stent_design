@@ -34,7 +34,7 @@ IS_PROMOTED = True
 # This is done by declaring the space, the tab, and the panel.
 WORKSPACE_ID = 'FusionSolidEnvironment'
 PANEL_ID = 'SolidCreatePanel'
-COMMAND_BESIDE_ID = 'ScriptsManagerCommand'
+COMMAND_BESIDE_ID = ''  # Place at the end instead of beside a specific command
 
 # Resource file folders relative to this file.
 ICON_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', '')
@@ -48,23 +48,38 @@ excel_file_path = ""
 
 def start():
     # Create a command Definition.
-    cmd_def = adsk.core.Application.get().userInterface.commandDefinitions.addButtonDefinition(CMD_ID, CMD_NAME, CMD_Description, ICON_FOLDER)
+    try:
+        futil.log(f'Starting {CMD_NAME} command...')
+        cmd_def = adsk.core.Application.get().userInterface.commandDefinitions.addButtonDefinition(CMD_ID, CMD_NAME, CMD_Description, ICON_FOLDER)
+        futil.log(f'Command definition created: {CMD_ID}')
 
-    # Define an event handler for the command created event. It will be called when the button is clicked.
-    futil.add_handler(cmd_def.commandCreated, command_created)
+        # Define an event handler for the command created event. It will be called when the button is clicked.
+        futil.add_handler(cmd_def.commandCreated, command_created)
 
-    # ******** Add a button into the UI so the user can run the command. ********
-    # Get the target workspace the button will be created in.
-    workspace = adsk.core.Application.get().userInterface.workspaces.itemById(WORKSPACE_ID)
+        # ******** Add a button into the UI so the user can run the command. ********
+        # Get the target workspace the button will be created in.
+        workspace = adsk.core.Application.get().userInterface.workspaces.itemById(WORKSPACE_ID)
+        futil.log(f'Got workspace: {workspace.name if workspace else "None"}')
 
-    # Get the panel the button will be created in.
-    panel = workspace.toolbarPanels.itemById(PANEL_ID)
+        # Get the panel the button will be created in.
+        panel = workspace.toolbarPanels.itemById(PANEL_ID)
+        futil.log(f'Got panel: {panel.name if panel else "None"}')
 
-    # Create the button command control in the UI after the specified existing command.
-    control = panel.controls.addCommand(cmd_def, COMMAND_BESIDE_ID, False)
+        # Create the button command control in the UI after the specified existing command.
+        if COMMAND_BESIDE_ID:
+            control = panel.controls.addCommand(cmd_def, COMMAND_BESIDE_ID, False)
+        else:
+            control = panel.controls.addCommand(cmd_def)
+        futil.log(f'Added control to panel: {control.id if control else "None"}')
 
-    # Specify if the command is promoted to the main toolbar.
-    control.isPromoted = IS_PROMOTED
+        # Specify if the command is promoted to the main toolbar.
+        control.isPromoted = IS_PROMOTED
+        futil.log(f'{CMD_NAME} command started successfully')
+        
+    except Exception as e:
+        futil.log(f'Error starting {CMD_NAME} command: {str(e)}')
+        import traceback
+        futil.log(traceback.format_exc())
 
 def stop():
     # Get the various UI elements for this command
