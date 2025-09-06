@@ -965,6 +965,624 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
         futil.log(f"Error initializing tables: {str(e)}")
 
 
+def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
+                     height_factors, gap_values, draw_border, draw_gap_centerlines, gap_centerlines_interior_only,
+                     draw_crown_peaks, draw_crown_waves, draw_crown_midlines, draw_crown_h_midlines, draw_crown_chord_lines,
+                     partial_crown_midlines, draw_crown_mids, partial_crown_mids, create_coincident_points,
+                     draw_fold_lock_limits, fold_lock_columns, per_ring_fold_lock_config,
+                     balloon_wall_um, chord_values=None, sagitta_values=None):
+    """Draw stent frame based on parameters using optimized calculations"""
+    import math
+
+    try:
+        app = adsk.core.Application.get()
+        ui = app.userInterface
+        design = adsk.fusion.Design.cast(app.activeProduct)
+        if not design:
+            ui.messageBox(
+                "Please create a new design or open an existing one before running this command.", "No Design Active")
+            return
+
+        root = design.rootComponent
+        sk = root.sketches.add(root.xYConstructionPlane)
+        waves_per_ring = max(1, crowns_per_ring // 2)
+        sk.name = f'Stent Frame - {num_rings} rings, {waves_per_ring} waves ({crowns_per_ring} crowns)'
+
+        # Convert mm to cm for Fusion API
+        def mm_to_cm(x):
+            return x * 0.1
+
+        # Calculate width from diameter (circumference)
+        width_mm = diameter_mm * math.pi
+
+        # Use height factors as proportional values (no base height needed)
+        ring_heights = height_factors  # Direct proportions
+
+        # Calculate with variable gap values and total length of length_mm
+        num_gaps = num_rings - 1
+        # Sum of actual gap values
+        total_gap_space = sum(gap_values[:num_gaps])
+        available_ring_space = length_mm - total_gap_space
+
+        # Scale ring heights to fit the available space
+        original_total_ring_height = sum(ring_heights)
+        ring_scale_factor = available_ring_space / original_total_ring_height
+        scaled_ring_heights = [h * ring_scale_factor for h in ring_heights]
+
+        # Calculate ring positions using variable gap values
+        ring_centers = []
+        # Start with half of first ring height
+        current_y = scaled_ring_heights[0] / 2
+        ring_centers.append(current_y)
+
+        for i in range(1, num_rings):
+            # Add half of previous ring + specific gap + half of current ring
+            gap_value = gap_values[i-1] if i - \
+                1 < len(gap_values) else gap_values[-1]
+            current_y += scaled_ring_heights[i-1] / \
+                2 + gap_value + scaled_ring_heights[i]/2
+            ring_centers.append(current_y)
+
+        # Calculate ring boundaries (crown start and end positions)
+        ring_start_lines = []  # Top of each ring
+        ring_end_lines = []    # Bottom of each ring
+
+        for i, center in enumerate(ring_centers):
+            ring_start = center - scaled_ring_heights[i]/2
+            ring_end = center + scaled_ring_heights[i]/2
+            ring_start_lines.append(ring_start)
+            ring_end_lines.append(ring_end)
+
+        # Calculate gap center positions (including first and last gaps)
+        gap_centers = []
+
+        # First gap: from Y=0 to start of first ring
+        first_gap_center = (0.0 + ring_start_lines[0]) / 2
+        gap_centers.append(first_gap_center)
+
+        # Middle gaps: between ring end and next ring start
+        for i in range(num_rings - 1):
+            gap_center_y = (ring_end_lines[i] + ring_start_lines[i+1]) / 2
+            gap_centers.append(gap_center_y)
+
+        # Last gap: from end of last ring to total length
+        last_gap_center = (ring_end_lines[-1] + length_mm) / 2
+        gap_centers.append(last_gap_center)
+
+        # Use the specified length as total length
+        total_length = length_mm
+
+        lines = sk.sketchCurves.sketchLines
+
+        # Draw border
+        if draw_border:
+            # Left border
+            line = lines.addByTwoPoints(
+                adsk.core.Point3D.create(mm_to_cm(0.0), mm_to_cm(0.0), 0),
+                adsk.core.Point3D.create(
+                    mm_to_cm(0.0), mm_to_cm(total_length), 0)
+            )
+            line.isConstruction = True
+
+            # Right border
+            line = lines.addByTwoPoints(
+                adsk.core.Point3D.create(mm_to_cm(width_mm), mm_to_cm(0.0), 0),
+                adsk.core.Point3D.create(
+                    mm_to_cm(width_mm), mm_to_cm(total_length), 0)
+            )
+            line.isConstruction = True
+
+            # Top border
+            line = lines.addByTwoPoints(
+                adsk.core.Point3D.create(
+                    mm_to_cm(0.0), mm_to_cm(total_length), 0),
+                adsk.core.Point3D.create(
+                    mm_to_cm(width_mm), mm_to_cm(total_length), 0)
+            )
+            line.isConstruction = True
+
+            # Bottom border
+            line = lines.addByTwoPoints(
+                adsk.core.Point3D.create(mm_to_cm(0.0), mm_to_cm(0.0), 0),
+                adsk.core.Point3D.create(mm_to_cm(width_mm), mm_to_cm(0.0), 0)
+            )
+            line.isConstruction = True
+
+        # Draw ring start lines (crown tops) - only if inside the box
+        if draw_crown_peaks:
+            for ring_start in ring_start_lines:
+                if 0 < ring_start < total_length:  # Only draw if inside the box
+                    line = lines.addByTwoPoints(
+                        adsk.core.Point3D.create(
+                            mm_to_cm(0.0), mm_to_cm(ring_start), 0),
+                        adsk.core.Point3D.create(
+                            mm_to_cm(width_mm), mm_to_cm(ring_start), 0)
+                    )
+                    line.isConstruction = True
+
+        # Draw ring end lines (crown bottoms) - only if inside the box
+        if draw_crown_peaks:
+            for ring_end in ring_end_lines:
+                if 0 < ring_end < total_length:  # Only draw if inside the box
+                    line = lines.addByTwoPoints(
+                        adsk.core.Point3D.create(
+                            mm_to_cm(0.0), mm_to_cm(ring_end), 0),
+                        adsk.core.Point3D.create(
+                            mm_to_cm(width_mm), mm_to_cm(ring_end), 0)
+                    )
+                    line.isConstruction = True
+
+        # Draw gap center lines
+        if draw_gap_centerlines and num_rings > 1:
+            if gap_centerlines_interior_only and num_rings > 2:
+                # Only draw interior gap lines (skip first and last gaps)
+                # Skip gap_centers[0] (before first ring) and gap_centers[-1] (after last ring)
+                interior_gap_centers = gap_centers[1:-
+                                                   1] if len(gap_centers) > 2 else []
+                for gap_center in interior_gap_centers:
+                    line = lines.addByTwoPoints(
+                        adsk.core.Point3D.create(
+                            mm_to_cm(0.0), mm_to_cm(gap_center), 0),
+                        adsk.core.Point3D.create(
+                            mm_to_cm(width_mm), mm_to_cm(gap_center), 0)
+                    )
+                    line.isConstruction = True
+            else:
+                # Draw ALL gap lines (including first and last gaps)
+                for gap_center in gap_centers:
+                    line = lines.addByTwoPoints(
+                        adsk.core.Point3D.create(
+                            mm_to_cm(0.0), mm_to_cm(gap_center), 0),
+                        adsk.core.Point3D.create(
+                            mm_to_cm(width_mm), mm_to_cm(gap_center), 0)
+                    )
+                    line.isConstruction = True
+
+        # Draw wave lines (vertical divisions at wave boundaries)
+        if draw_crown_waves:
+            waves = max(1, crowns_per_ring // 2)
+            wave_spacing = width_mm / waves
+            # Draw lines for each wave boundary (not at edges)
+            for i in range(1, waves):
+                x = i * wave_spacing
+                line = lines.addByTwoPoints(
+                    adsk.core.Point3D.create(mm_to_cm(x), mm_to_cm(0.0), 0),
+                    adsk.core.Point3D.create(
+                        mm_to_cm(x), mm_to_cm(total_length), 0)
+                )
+                line.isConstruction = True
+
+        # Draw wave midlines (vertical lines at midpoint within each wave)
+        if draw_crown_midlines or partial_crown_midlines > 0:
+            waves = max(1, crowns_per_ring // 2)
+            wave_spacing = width_mm / waves
+            # Determine how many crowns to draw midlines for
+            if partial_crown_midlines > 0:
+                # Use partial count (limited from left)
+                midlines_count = min(partial_crown_midlines, waves)
+            else:
+                # Use full count if partial is 0 and main option is enabled
+                midlines_count = waves if draw_crown_midlines else 0
+
+            # Draw midlines for the specified number of crowns from left
+            for i in range(midlines_count):
+                # Midline at the center of each crown section
+                x = i * wave_spacing + wave_spacing / 2
+
+                line = lines.addByTwoPoints(
+                    adsk.core.Point3D.create(mm_to_cm(x), mm_to_cm(0.0), 0),
+                    adsk.core.Point3D.create(
+                        mm_to_cm(x), mm_to_cm(total_length), 0)
+                )
+                line.isConstruction = True
+
+        # Draw crown horizontal midlines (horizontal lines at midpoint of each ring height)
+        if draw_crown_h_midlines:
+            # Draw horizontal midlines at each ring center
+            for center in ring_centers:
+                line = lines.addByTwoPoints(
+                    adsk.core.Point3D.create(
+                        mm_to_cm(0.0), mm_to_cm(center), 0),
+                    adsk.core.Point3D.create(
+                        mm_to_cm(width_mm), mm_to_cm(center), 0)
+                )
+                line.isConstruction = True
+
+        # Removed drawing sagitta guide lines. Chord lines will indicate sagitta positions instead.
+
+        # Draw crown chord lines positioned at sagitta distance from crown tips
+        if draw_crown_chord_lines:
+            crown_spacing = width_mm / crowns_per_ring
+
+            # Precompute sagitta per ring (from table or fallback geometry)
+            ring_sagittas = []
+            for i in range(num_rings):
+                ring_height = scaled_ring_heights[i]
+                if sagitta_values and i < len(sagitta_values):
+                    s_val = sagitta_values[i]
+                    print(
+                        f"Ring {i+1}: Using user-defined sagitta={s_val:.3f}mm")
+                else:
+                    crown_arc_radius_mm = 0.2  # Default crown arc radius
+                    if crown_arc_radius_mm > 0 and ring_height > 0 and ring_height <= 2 * crown_arc_radius_mm:
+                        half_chord = ring_height / 2.0
+                        discriminant = crown_arc_radius_mm * crown_arc_radius_mm - half_chord * half_chord
+                        if discriminant >= 0:
+                            s_val = crown_arc_radius_mm - \
+                                math.sqrt(discriminant)
+                        else:
+                            s_val = ring_height / 16.4
+                    else:
+                        s_val = ring_height / 16.4
+                    print(
+                        f"Ring {i+1}: Using calculated sagitta={s_val:.3f}mm")
+                ring_sagittas.append(s_val)
+
+            # Draw chord lines for each ring
+            for i in range(num_rings):
+                ring_height = scaled_ring_heights[i]
+                ring_center = ring_centers[i]
+
+                # Use user-provided chord value if available, otherwise calculate
+                if chord_values and i < len(chord_values):
+                    # Use user-edited chord value from table
+                    chord_mm = chord_values[i]
+                    print(
+                        f"Ring {i+1}: Using user-defined chord={chord_mm:.3f}mm")
+                else:
+                    # Fallback: calculate chord using crown arc parameters
+                    crown_arc_radius_mm = 0.2  # Default crown arc radius
+                    crown_angle_deg = 72.0  # Default crown angle
+                    crown_radius_um = crown_arc_radius_mm * 1000.0
+                    sagitta_calc, chord_calc, arc_calc = crown_apex_from_theta(
+                        crown_angle_deg, crown_radius_um)
+                    chord_mm = chord_calc
+                    print(
+                        f"Ring {i+1}: Using calculated chord={chord_mm:.3f}mm")
+
+                # Draw chord lines for each crown in this ring
+                for crown_index in range(crowns_per_ring):
+                    # Calculate crown center position
+                    crown_center_x = (crown_index + 0.5) * crown_spacing
+
+                    # Calculate chord start and end positions (centered on crown)
+                    chord_half_length = chord_mm / 2.0
+                    chord_start_x = crown_center_x - chord_half_length
+                    chord_end_x = crown_center_x + chord_half_length
+
+                    # Place a single chord per crown:
+                    # - First half of crowns are 'up' (near top tip)
+                    # - Second half are 'down' (near bottom tip)
+                    # - Alternate the pattern per ring index so adjacent rings are opposite
+                    sagitta_mm = ring_sagittas[i]
+                    chord_y_top = ring_center + ring_height/2 - sagitta_mm
+                    chord_y_bottom = ring_center - ring_height/2 + sagitta_mm
+
+                    # Orientation per wave: within each wave (2 crowns), first crown up, second down; flip per ring
+                    wave_index = crown_index // 2
+                    is_first_in_wave = (crown_index % 2 == 0)
+                    # even rings: first in wave up; odd: first in wave down
+                    up_first = (i % 2 == 0)
+                    is_up = is_first_in_wave if up_first else (
+                        not is_first_in_wave)
+                    chord_y = chord_y_top if is_up else chord_y_bottom
+                    orientation = 'up' if is_up else 'down'
+
+                    print(
+                        f"  Crown {crown_index+1} ({orientation}): chord x={chord_start_x:.3f}-{chord_end_x:.3f} at y={chord_y:.3f}mm")
+                    line = lines.addByTwoPoints(
+                        adsk.core.Point3D.create(
+                            mm_to_cm(chord_start_x), mm_to_cm(chord_y), 0),
+                        adsk.core.Point3D.create(
+                            mm_to_cm(chord_end_x), mm_to_cm(chord_y), 0)
+                    )
+                    line.isConstruction = True
+
+        # Draw crown mid lines (vertical lines at center of each crown - wave quarter lines)
+        if draw_crown_mids or partial_crown_mids > 0:
+            crown_spacing = width_mm / crowns_per_ring
+            # Determine how many crowns to draw mid lines for
+            if partial_crown_mids > 0:
+                # Use partial count (limited from left)
+                mids_count = min(partial_crown_mids, crowns_per_ring)
+            else:
+                # Use full count if partial is 0 and main option is enabled
+                mids_count = crowns_per_ring if draw_crown_mids else 0
+
+            # Draw mid lines for the specified number of crowns from left
+            for i in range(mids_count):
+                # Mid line at center position (wave quarter line)
+                x_mid = i * crown_spacing + crown_spacing / 2
+                line = lines.addByTwoPoints(
+                    adsk.core.Point3D.create(
+                        mm_to_cm(x_mid), mm_to_cm(0.0), 0),
+                    adsk.core.Point3D.create(
+                        mm_to_cm(x_mid), mm_to_cm(total_length), 0)
+                )
+                line.isConstruction = True
+
+        # Draw fold-lock limit lines in specified crown boxes
+        if draw_fold_lock_limits:
+            crown_spacing = width_mm / crowns_per_ring
+
+            # Always use per-ring configuration
+            try:
+                # Parse per-ring configuration: "ring:boxes:gap_mm;ring:boxes:gap_mm"
+                ring_configs = {}
+                for config_part in per_ring_fold_lock_config.split(';'):
+                    if ':' in config_part:
+                        parts = config_part.strip().split(':')
+                        if len(parts) == 3:
+                            # Convert to 0-based
+                            ring_idx = int(parts[0].strip()) - 1
+                            boxes_str = parts[1].strip()
+                            # Now in mm, not fraction
+                            gap_width_mm = float(parts[2].strip())
+                            box_indices = [int(x.strip()) for x in boxes_str.split(
+                                ',') if x.strip().isdigit()]
+                            ring_configs[ring_idx] = {
+                                'boxes': box_indices, 'gap_mm': gap_width_mm}
+
+                # Draw fold-lock lines for each configured ring/gap
+                for gap_idx, gap_center_y in enumerate(gap_centers):
+                    if gap_idx in ring_configs:
+                        config = ring_configs[gap_idx]
+                        fold_lock_indices = config['boxes']
+                        # Gap width in mm
+                        fold_lock_gap_mm = config['gap_mm']
+
+                        # Use half the gap width for vertical offset
+                        line_offset = fold_lock_gap_mm / 2
+
+                        # Draw lines for specified crown boxes
+                        for crown_idx in fold_lock_indices:
+                            if 0 <= crown_idx < crowns_per_ring:
+                                # Calculate crown box boundaries
+                                crown_left = crown_idx * crown_spacing
+                                crown_right = (
+                                    crown_idx + 1) * crown_spacing
+
+                                # Draw horizontal fold-lock limit line ABOVE gap center
+                                line = lines.addByTwoPoints(
+                                    adsk.core.Point3D.create(
+                                        mm_to_cm(crown_left), mm_to_cm(gap_center_y - line_offset), 0),
+                                    adsk.core.Point3D.create(
+                                        mm_to_cm(crown_right), mm_to_cm(gap_center_y - line_offset), 0)
+                                )
+                                line.isConstruction = True
+
+                                # Draw horizontal fold-lock limit line BELOW gap center
+                                line = lines.addByTwoPoints(
+                                    adsk.core.Point3D.create(
+                                        mm_to_cm(crown_left), mm_to_cm(gap_center_y + line_offset), 0),
+                                    adsk.core.Point3D.create(
+                                        mm_to_cm(crown_right), mm_to_cm(gap_center_y + line_offset), 0)
+                                )
+                                line.isConstruction = True
+
+            except (ValueError, IndexError):
+                # If per-ring config is invalid, don't draw fold-lock lines
+                pass
+
+        # Show summary
+        if ui:
+            # Count the lines that were actually drawn
+            lines_inside_box = len([r for r in ring_start_lines if 0 < r < total_length]) + \
+                len([r for r in ring_end_lines if 0 < r < total_length]) + \
+                len(gap_centers)
+
+            # Count wave boundary lines and midlines
+            waves = max(1, crowns_per_ring // 2)
+            crown_waves_count = (waves - 1) if draw_crown_waves else 0
+
+            # Count actual midlines drawn (partial or full)
+            if partial_crown_midlines > 0:
+                midlines_count = min(partial_crown_midlines, waves)
+            else:
+                midlines_count = waves if draw_crown_midlines else 0
+
+            h_midlines_count = num_rings if draw_crown_h_midlines else 0
+
+            # Count actual mid lines drawn (partial or full)
+            if partial_crown_mids > 0:
+                # 1 line per crown
+                mids_count = min(partial_crown_mids, crowns_per_ring)
+            else:
+                mids_count = crowns_per_ring if draw_crown_mids else 0
+
+            # Create coincident points at line intersections if requested
+            points_created = 0
+            constraints_created = 0
+            if create_coincident_points:
+                try:
+                    # Collect all horizontal line Y positions
+                    horizontal_lines = []
+
+                    # Add border lines
+                    if draw_border:
+                        horizontal_lines.extend([0.0, total_length])
+
+                    # Add gap centerlines
+                    if draw_gap_centerlines:
+                        horizontal_lines.extend(gap_centers)
+
+                    # Add crown peaks (ring start positions)
+                    if draw_crown_peaks:
+                        # Add both ring start and ring end lines (as drawn in the actual code)
+                        for ring_start in ring_start_lines:
+                            if 0 < ring_start < total_length:  # Only add if inside the box
+                                horizontal_lines.append(ring_start)
+                        for ring_end in ring_end_lines:
+                            if 0 < ring_end < total_length:  # Only add if inside the box
+                                horizontal_lines.append(ring_end)
+
+                    # Add horizontal crown midlines (ring centers)
+                    if draw_crown_h_midlines:
+                        horizontal_lines.extend(ring_centers)
+
+                    # Collect all vertical line X positions
+                    vertical_lines = []
+
+                    # Add border lines
+                    if draw_border:
+                        vertical_lines.extend([0.0, width_mm])
+
+                    # Add wave boundary lines
+                    if draw_crown_waves:
+                        waves = max(1, crowns_per_ring // 2)
+                        wave_width = width_mm / waves
+                        # Only add lines that are actually drawn (between waves, not at borders)
+                        for w in range(1, waves):
+                            x = w * wave_width
+                            vertical_lines.append(x)
+
+                    # Add wave midlines (full or partial)
+                    if draw_crown_midlines or partial_crown_midlines > 0:
+                        waves = max(1, crowns_per_ring // 2)
+                        wave_width = width_mm / waves
+                        midlines_to_draw = partial_crown_midlines if partial_crown_midlines > 0 else waves
+                        for w in range(min(midlines_to_draw, waves)):
+                            midline_x = (w + 0.5) * wave_width
+                            vertical_lines.append(midline_x)
+
+                    # Add crown mid lines (full or partial)
+                    if draw_crown_mids or partial_crown_mids > 0:
+                        crown_width = width_mm / crowns_per_ring
+                        mids_to_draw = partial_crown_mids if partial_crown_mids > 0 else crowns_per_ring
+                        for crown in range(min(mids_to_draw, crowns_per_ring)):
+                            mid_x = (crown + 0.5) * crown_width
+                            vertical_lines.append(mid_x)
+
+                    # Create points at all intersections and add coincident constraints
+                    created_points = []
+
+                    # Debug: log which horizontal lines we're collecting
+                    debug_info = []
+                    debug_info.append(f"Horizontal lines collected:")
+                    if draw_border:
+                        debug_info.append(f"  Border: 0.0, {total_length}")
+                    if draw_gap_centerlines:
+                        debug_info.append(
+                            f"  Gap centers: {[f'{g:.3f}' for g in gap_centers]}")
+                    if draw_crown_peaks:
+                        ring_starts_inside = [
+                            rs for rs in ring_start_lines if 0 < rs < total_length]
+                        ring_ends_inside = [
+                            re for re in ring_end_lines if 0 < re < total_length]
+                        debug_info.append(
+                            f"  Ring starts: {[f'{rs:.3f}' for rs in ring_starts_inside]}")
+                        debug_info.append(
+                            f"  Ring ends: {[f'{re:.3f}' for re in ring_ends_inside]}")
+                    if draw_crown_h_midlines:
+                        debug_info.append(
+                            f"  Ring centers: {[f'{rc:.3f}' for rc in ring_centers]}")
+
+                    debug_info.append(f"Vertical lines collected:")
+                    if draw_border:
+                        debug_info.append(f"  Border: 0.0, {width_mm}")
+                    if draw_crown_waves:
+                        crown_width = width_mm / crowns_per_ring
+                        wave_lines = [
+                            crown * crown_width for crown in range(1, crowns_per_ring)]
+                        debug_info.append(
+                            f"  Crown waves: {[f'{w:.3f}' for w in wave_lines]}")
+
+                    futil.log('\n'.join(debug_info))
+
+                    for h_y in horizontal_lines:
+                        for v_x in vertical_lines:
+                            # Convert to cm for Fusion (Fusion uses cm internally)
+                            point_x_cm = v_x / 10.0
+                            point_y_cm = h_y / 10.0
+                            point = adsk.core.Point3D.create(
+                                point_x_cm, point_y_cm, 0)
+                            sketch_point = sk.sketchPoints.add(point)
+                            created_points.append((sketch_point, v_x, h_y))
+                            points_created += 1
+
+                    # Create coincident constraints between points and lines
+                    constraints_created = 0
+                    try:
+                        constraints = sk.geometricConstraints
+
+                        # Sort lines into horizontal and vertical for easier matching
+                        horizontal_sketch_lines = []
+                        vertical_sketch_lines = []
+
+                        for line in sk.sketchCurves.sketchLines:
+                            start_pt = line.startSketchPoint.geometry
+                            end_pt = line.endSketchPoint.geometry
+
+                            # Check if horizontal (Y values are the same)
+                            if abs(start_pt.y - end_pt.y) < 0.001:
+                                y_mm = start_pt.y * 10.0  # Convert to mm
+                                horizontal_sketch_lines.append((line, y_mm))
+
+                            # Check if vertical (X values are the same)
+                            elif abs(start_pt.x - end_pt.x) < 0.001:
+                                x_mm = start_pt.x * 10.0  # Convert to mm
+                                vertical_sketch_lines.append((line, x_mm))
+
+                        for sketch_point, x_mm, y_mm in created_points:
+                            # Find horizontal line at this Y position
+                            for line, line_y_mm in horizontal_sketch_lines:
+                                if abs(line_y_mm - y_mm) < 0.01:  # Tighter tolerance
+                                    try:
+                                        constraint = constraints.addCoincident(
+                                            sketch_point, line)
+                                        constraints_created += 1
+                                    except:
+                                        pass  # Skip if constraint fails
+
+                            # Find vertical line at this X position
+                            for line, line_x_mm in vertical_sketch_lines:
+                                if abs(line_x_mm - x_mm) < 0.01:  # Tighter tolerance
+                                    try:
+                                        constraint = constraints.addCoincident(
+                                            sketch_point, line)
+                                        constraints_created += 1
+                                    except:
+                                        pass  # Skip if constraint fails
+
+                    except Exception as constraint_error:
+                        futil.log(
+                            f'Error creating constraints: {str(constraint_error)}')
+                        constraints_created = 0
+
+                except Exception as e:
+                    futil.log(f'Error creating coincident points: {str(e)}')
+
+            waves = max(1, crowns_per_ring // 2)
+            ui.messageBox(
+                f'Stent frame created successfully!\n'
+                f'• Diameter: {diameter_mm:.3f} mm\n'
+                f'• Length: {length_mm:.3f} mm\n'
+                f'• Width (circumference): {width_mm:.3f} mm\n'
+                f'• Rings: {num_rings}\n'
+                f'• Waves per ring: {waves} (crowns: {crowns_per_ring})\n'
+                f'• Scaled ring heights: {[f"{h:.3f}" for h in scaled_ring_heights]}\n'
+                f'• Gap values: {[f"{g:.3f}" for g in gap_values[:num_gaps]]} mm\n'
+                f'• Ring scale factor: {ring_scale_factor:.3f}\n'
+                f'• Horizontal lines inside box: {lines_inside_box}\n'
+                f'• Vertical wave boundaries: {crown_waves_count}\n'
+                f'• Vertical wave midlines: {midlines_count}\n'
+                f'• Vertical crown mid lines: {mids_count}\n'
+                f'• Horizontal crown midlines: {h_midlines_count}\n'
+                f'• Coincident points created: {points_created}\n'
+                f'• Coincident constraints created: {constraints_created}'
+            )
+
+    except Exception as e:
+        try:
+            app = adsk.core.Application.get()
+            ui = app.userInterface
+            ui.messageBox(f'Error creating stent frame: {str(e)}')
+        except:
+            pass
+        import traceback
+        futil.log(f'Error in draw_stent_frame: {traceback.format_exc()}')
+
+
 # This event handler is called when the user clicks the OK button in the command dialog or
 # is immediately called after the created event not command inputs were created for the dialog.
 def command_execute(args: adsk.core.CommandEventArgs):
@@ -3281,624 +3899,6 @@ def command_validate_input(args: adsk.core.ValidateInputsEventArgs):
         args.areInputsValid = True
     else:
         args.areInputsValid = False
-
-
-def draw_stent_frame(diameter_mm, length_mm, num_rings, crowns_per_ring,
-                     height_factors, gap_values, draw_border, draw_gap_centerlines, gap_centerlines_interior_only,
-                     draw_crown_peaks, draw_crown_waves, draw_crown_midlines, draw_crown_h_midlines, draw_crown_chord_lines,
-                     partial_crown_midlines, draw_crown_mids, partial_crown_mids, create_coincident_points,
-                     draw_fold_lock_limits, fold_lock_columns, per_ring_fold_lock_config,
-                     balloon_wall_um, chord_values=None, sagitta_values=None):
-    """Draw stent frame based on parameters using optimized calculations"""
-    import math
-
-    try:
-        app = adsk.core.Application.get()
-        ui = app.userInterface
-        design = adsk.fusion.Design.cast(app.activeProduct)
-        if not design:
-            ui.messageBox(
-                "Please create a new design or open an existing one before running this command.", "No Design Active")
-            return
-
-        root = design.rootComponent
-        sk = root.sketches.add(root.xYConstructionPlane)
-        waves_per_ring = max(1, crowns_per_ring // 2)
-        sk.name = f'Stent Frame - {num_rings} rings, {waves_per_ring} waves ({crowns_per_ring} crowns)'
-
-        # Convert mm to cm for Fusion API
-        def mm_to_cm(x):
-            return x * 0.1
-
-        # Calculate width from diameter (circumference)
-        width_mm = diameter_mm * math.pi
-
-        # Use height factors as proportional values (no base height needed)
-        ring_heights = height_factors  # Direct proportions
-
-        # Calculate with variable gap values and total length of length_mm
-        num_gaps = num_rings - 1
-        # Sum of actual gap values
-        total_gap_space = sum(gap_values[:num_gaps])
-        available_ring_space = length_mm - total_gap_space
-
-        # Scale ring heights to fit the available space
-        original_total_ring_height = sum(ring_heights)
-        ring_scale_factor = available_ring_space / original_total_ring_height
-        scaled_ring_heights = [h * ring_scale_factor for h in ring_heights]
-
-        # Calculate ring positions using variable gap values
-        ring_centers = []
-        # Start with half of first ring height
-        current_y = scaled_ring_heights[0] / 2
-        ring_centers.append(current_y)
-
-        for i in range(1, num_rings):
-            # Add half of previous ring + specific gap + half of current ring
-            gap_value = gap_values[i-1] if i - \
-                1 < len(gap_values) else gap_values[-1]
-            current_y += scaled_ring_heights[i-1] / \
-                2 + gap_value + scaled_ring_heights[i]/2
-            ring_centers.append(current_y)
-
-        # Calculate ring boundaries (crown start and end positions)
-        ring_start_lines = []  # Top of each ring
-        ring_end_lines = []    # Bottom of each ring
-
-        for i, center in enumerate(ring_centers):
-            ring_start = center - scaled_ring_heights[i]/2
-            ring_end = center + scaled_ring_heights[i]/2
-            ring_start_lines.append(ring_start)
-            ring_end_lines.append(ring_end)
-
-        # Calculate gap center positions (including first and last gaps)
-        gap_centers = []
-
-        # First gap: from Y=0 to start of first ring
-        first_gap_center = (0.0 + ring_start_lines[0]) / 2
-        gap_centers.append(first_gap_center)
-
-        # Middle gaps: between ring end and next ring start
-        for i in range(num_rings - 1):
-            gap_center_y = (ring_end_lines[i] + ring_start_lines[i+1]) / 2
-            gap_centers.append(gap_center_y)
-
-        # Last gap: from end of last ring to total length
-        last_gap_center = (ring_end_lines[-1] + length_mm) / 2
-        gap_centers.append(last_gap_center)
-
-        # Use the specified length as total length
-        total_length = length_mm
-
-        lines = sk.sketchCurves.sketchLines
-
-        # Draw border
-        if draw_border:
-            # Left border
-            line = lines.addByTwoPoints(
-                adsk.core.Point3D.create(mm_to_cm(0.0), mm_to_cm(0.0), 0),
-                adsk.core.Point3D.create(
-                    mm_to_cm(0.0), mm_to_cm(total_length), 0)
-            )
-            line.isConstruction = True
-
-            # Right border
-            line = lines.addByTwoPoints(
-                adsk.core.Point3D.create(mm_to_cm(width_mm), mm_to_cm(0.0), 0),
-                adsk.core.Point3D.create(
-                    mm_to_cm(width_mm), mm_to_cm(total_length), 0)
-            )
-            line.isConstruction = True
-
-            # Top border
-            line = lines.addByTwoPoints(
-                adsk.core.Point3D.create(
-                    mm_to_cm(0.0), mm_to_cm(total_length), 0),
-                adsk.core.Point3D.create(
-                    mm_to_cm(width_mm), mm_to_cm(total_length), 0)
-            )
-            line.isConstruction = True
-
-            # Bottom border
-            line = lines.addByTwoPoints(
-                adsk.core.Point3D.create(mm_to_cm(0.0), mm_to_cm(0.0), 0),
-                adsk.core.Point3D.create(mm_to_cm(width_mm), mm_to_cm(0.0), 0)
-            )
-            line.isConstruction = True
-
-        # Draw ring start lines (crown tops) - only if inside the box
-        if draw_crown_peaks:
-            for ring_start in ring_start_lines:
-                if 0 < ring_start < total_length:  # Only draw if inside the box
-                    line = lines.addByTwoPoints(
-                        adsk.core.Point3D.create(
-                            mm_to_cm(0.0), mm_to_cm(ring_start), 0),
-                        adsk.core.Point3D.create(
-                            mm_to_cm(width_mm), mm_to_cm(ring_start), 0)
-                    )
-                    line.isConstruction = True
-
-        # Draw ring end lines (crown bottoms) - only if inside the box
-        if draw_crown_peaks:
-            for ring_end in ring_end_lines:
-                if 0 < ring_end < total_length:  # Only draw if inside the box
-                    line = lines.addByTwoPoints(
-                        adsk.core.Point3D.create(
-                            mm_to_cm(0.0), mm_to_cm(ring_end), 0),
-                        adsk.core.Point3D.create(
-                            mm_to_cm(width_mm), mm_to_cm(ring_end), 0)
-                    )
-                    line.isConstruction = True
-
-        # Draw gap center lines
-        if draw_gap_centerlines and num_rings > 1:
-            if gap_centerlines_interior_only and num_rings > 2:
-                # Only draw interior gap lines (skip first and last gaps)
-                # Skip gap_centers[0] (before first ring) and gap_centers[-1] (after last ring)
-                interior_gap_centers = gap_centers[1:-
-                                                   1] if len(gap_centers) > 2 else []
-                for gap_center in interior_gap_centers:
-                    line = lines.addByTwoPoints(
-                        adsk.core.Point3D.create(
-                            mm_to_cm(0.0), mm_to_cm(gap_center), 0),
-                        adsk.core.Point3D.create(
-                            mm_to_cm(width_mm), mm_to_cm(gap_center), 0)
-                    )
-                    line.isConstruction = True
-            else:
-                # Draw ALL gap lines (including first and last gaps)
-                for gap_center in gap_centers:
-                    line = lines.addByTwoPoints(
-                        adsk.core.Point3D.create(
-                            mm_to_cm(0.0), mm_to_cm(gap_center), 0),
-                        adsk.core.Point3D.create(
-                            mm_to_cm(width_mm), mm_to_cm(gap_center), 0)
-                    )
-                    line.isConstruction = True
-
-        # Draw wave lines (vertical divisions at wave boundaries)
-        if draw_crown_waves:
-            waves = max(1, crowns_per_ring // 2)
-            wave_spacing = width_mm / waves
-            # Draw lines for each wave boundary (not at edges)
-            for i in range(1, waves):
-                x = i * wave_spacing
-                line = lines.addByTwoPoints(
-                    adsk.core.Point3D.create(mm_to_cm(x), mm_to_cm(0.0), 0),
-                    adsk.core.Point3D.create(
-                        mm_to_cm(x), mm_to_cm(total_length), 0)
-                )
-                line.isConstruction = True
-
-        # Draw wave midlines (vertical lines at midpoint within each wave)
-        if draw_crown_midlines or partial_crown_midlines > 0:
-            waves = max(1, crowns_per_ring // 2)
-            wave_spacing = width_mm / waves
-            # Determine how many crowns to draw midlines for
-            if partial_crown_midlines > 0:
-                # Use partial count (limited from left)
-                midlines_count = min(partial_crown_midlines, waves)
-            else:
-                # Use full count if partial is 0 and main option is enabled
-                midlines_count = waves if draw_crown_midlines else 0
-
-            # Draw midlines for the specified number of crowns from left
-            for i in range(midlines_count):
-                # Midline at the center of each crown section
-                x = i * wave_spacing + wave_spacing / 2
-
-                line = lines.addByTwoPoints(
-                    adsk.core.Point3D.create(mm_to_cm(x), mm_to_cm(0.0), 0),
-                    adsk.core.Point3D.create(
-                        mm_to_cm(x), mm_to_cm(total_length), 0)
-                )
-                line.isConstruction = True
-
-        # Draw crown horizontal midlines (horizontal lines at midpoint of each ring height)
-        if draw_crown_h_midlines:
-            # Draw horizontal midlines at each ring center
-            for center in ring_centers:
-                line = lines.addByTwoPoints(
-                    adsk.core.Point3D.create(
-                        mm_to_cm(0.0), mm_to_cm(center), 0),
-                    adsk.core.Point3D.create(
-                        mm_to_cm(width_mm), mm_to_cm(center), 0)
-                )
-                line.isConstruction = True
-
-        # Removed drawing sagitta guide lines. Chord lines will indicate sagitta positions instead.
-
-        # Draw crown chord lines positioned at sagitta distance from crown tips
-        if draw_crown_chord_lines:
-            crown_spacing = width_mm / crowns_per_ring
-
-            # Precompute sagitta per ring (from table or fallback geometry)
-            ring_sagittas = []
-            for i in range(num_rings):
-                ring_height = scaled_ring_heights[i]
-                if sagitta_values and i < len(sagitta_values):
-                    s_val = sagitta_values[i]
-                    print(
-                        f"Ring {i+1}: Using user-defined sagitta={s_val:.3f}mm")
-                else:
-                    crown_arc_radius_mm = 0.2  # Default crown arc radius
-                    if crown_arc_radius_mm > 0 and ring_height > 0 and ring_height <= 2 * crown_arc_radius_mm:
-                        half_chord = ring_height / 2.0
-                        discriminant = crown_arc_radius_mm * crown_arc_radius_mm - half_chord * half_chord
-                        if discriminant >= 0:
-                            s_val = crown_arc_radius_mm - \
-                                math.sqrt(discriminant)
-                        else:
-                            s_val = ring_height / 16.4
-                    else:
-                        s_val = ring_height / 16.4
-                    print(
-                        f"Ring {i+1}: Using calculated sagitta={s_val:.3f}mm")
-                ring_sagittas.append(s_val)
-
-            # Draw chord lines for each ring
-            for i in range(num_rings):
-                ring_height = scaled_ring_heights[i]
-                ring_center = ring_centers[i]
-
-                # Use user-provided chord value if available, otherwise calculate
-                if chord_values and i < len(chord_values):
-                    # Use user-edited chord value from table
-                    chord_mm = chord_values[i]
-                    print(
-                        f"Ring {i+1}: Using user-defined chord={chord_mm:.3f}mm")
-                else:
-                    # Fallback: calculate chord using crown arc parameters
-                    crown_arc_radius_mm = 0.2  # Default crown arc radius
-                    crown_angle_deg = 72.0  # Default crown angle
-                    crown_radius_um = crown_arc_radius_mm * 1000.0
-                    sagitta_calc, chord_calc, arc_calc = crown_apex_from_theta(
-                        crown_angle_deg, crown_radius_um)
-                    chord_mm = chord_calc
-                    print(
-                        f"Ring {i+1}: Using calculated chord={chord_mm:.3f}mm")
-
-                # Draw chord lines for each crown in this ring
-                for crown_index in range(crowns_per_ring):
-                    # Calculate crown center position
-                    crown_center_x = (crown_index + 0.5) * crown_spacing
-
-                    # Calculate chord start and end positions (centered on crown)
-                    chord_half_length = chord_mm / 2.0
-                    chord_start_x = crown_center_x - chord_half_length
-                    chord_end_x = crown_center_x + chord_half_length
-
-                    # Place a single chord per crown:
-                    # - First half of crowns are 'up' (near top tip)
-                    # - Second half are 'down' (near bottom tip)
-                    # - Alternate the pattern per ring index so adjacent rings are opposite
-                    sagitta_mm = ring_sagittas[i]
-                    chord_y_top = ring_center + ring_height/2 - sagitta_mm
-                    chord_y_bottom = ring_center - ring_height/2 + sagitta_mm
-
-                    # Orientation per wave: within each wave (2 crowns), first crown up, second down; flip per ring
-                    wave_index = crown_index // 2
-                    is_first_in_wave = (crown_index % 2 == 0)
-                    # even rings: first in wave up; odd: first in wave down
-                    up_first = (i % 2 == 0)
-                    is_up = is_first_in_wave if up_first else (
-                        not is_first_in_wave)
-                    chord_y = chord_y_top if is_up else chord_y_bottom
-                    orientation = 'up' if is_up else 'down'
-
-                    print(
-                        f"  Crown {crown_index+1} ({orientation}): chord x={chord_start_x:.3f}-{chord_end_x:.3f} at y={chord_y:.3f}mm")
-                    line = lines.addByTwoPoints(
-                        adsk.core.Point3D.create(
-                            mm_to_cm(chord_start_x), mm_to_cm(chord_y), 0),
-                        adsk.core.Point3D.create(
-                            mm_to_cm(chord_end_x), mm_to_cm(chord_y), 0)
-                    )
-                    line.isConstruction = True
-
-        # Draw crown mid lines (vertical lines at center of each crown - wave quarter lines)
-        if draw_crown_mids or partial_crown_mids > 0:
-            crown_spacing = width_mm / crowns_per_ring
-            # Determine how many crowns to draw mid lines for
-            if partial_crown_mids > 0:
-                # Use partial count (limited from left)
-                mids_count = min(partial_crown_mids, crowns_per_ring)
-            else:
-                # Use full count if partial is 0 and main option is enabled
-                mids_count = crowns_per_ring if draw_crown_mids else 0
-
-            # Draw mid lines for the specified number of crowns from left
-            for i in range(mids_count):
-                # Mid line at center position (wave quarter line)
-                x_mid = i * crown_spacing + crown_spacing / 2
-                line = lines.addByTwoPoints(
-                    adsk.core.Point3D.create(
-                        mm_to_cm(x_mid), mm_to_cm(0.0), 0),
-                    adsk.core.Point3D.create(
-                        mm_to_cm(x_mid), mm_to_cm(total_length), 0)
-                )
-                line.isConstruction = True
-
-        # Draw fold-lock limit lines in specified crown boxes
-        if draw_fold_lock_limits:
-            crown_spacing = width_mm / crowns_per_ring
-
-            # Always use per-ring configuration
-            try:
-                # Parse per-ring configuration: "ring:boxes:gap_mm;ring:boxes:gap_mm"
-                ring_configs = {}
-                for config_part in per_ring_fold_lock_config.split(';'):
-                    if ':' in config_part:
-                        parts = config_part.strip().split(':')
-                        if len(parts) == 3:
-                            # Convert to 0-based
-                            ring_idx = int(parts[0].strip()) - 1
-                            boxes_str = parts[1].strip()
-                            # Now in mm, not fraction
-                            gap_width_mm = float(parts[2].strip())
-                            box_indices = [int(x.strip()) for x in boxes_str.split(
-                                ',') if x.strip().isdigit()]
-                            ring_configs[ring_idx] = {
-                                'boxes': box_indices, 'gap_mm': gap_width_mm}
-
-                # Draw fold-lock lines for each configured ring/gap
-                for gap_idx, gap_center_y in enumerate(gap_centers):
-                    if gap_idx in ring_configs:
-                        config = ring_configs[gap_idx]
-                        fold_lock_indices = config['boxes']
-                        # Gap width in mm
-                        fold_lock_gap_mm = config['gap_mm']
-
-                        # Use half the gap width for vertical offset
-                        line_offset = fold_lock_gap_mm / 2
-
-                        # Draw lines for specified crown boxes
-                        for crown_idx in fold_lock_indices:
-                            if 0 <= crown_idx < crowns_per_ring:
-                                # Calculate crown box boundaries
-                                crown_left = crown_idx * crown_spacing
-                                crown_right = (
-                                    crown_idx + 1) * crown_spacing
-
-                                # Draw horizontal fold-lock limit line ABOVE gap center
-                                line = lines.addByTwoPoints(
-                                    adsk.core.Point3D.create(
-                                        mm_to_cm(crown_left), mm_to_cm(gap_center_y - line_offset), 0),
-                                    adsk.core.Point3D.create(
-                                        mm_to_cm(crown_right), mm_to_cm(gap_center_y - line_offset), 0)
-                                )
-                                line.isConstruction = True
-
-                                # Draw horizontal fold-lock limit line BELOW gap center
-                                line = lines.addByTwoPoints(
-                                    adsk.core.Point3D.create(
-                                        mm_to_cm(crown_left), mm_to_cm(gap_center_y + line_offset), 0),
-                                    adsk.core.Point3D.create(
-                                        mm_to_cm(crown_right), mm_to_cm(gap_center_y + line_offset), 0)
-                                )
-                                line.isConstruction = True
-
-            except (ValueError, IndexError):
-                # If per-ring config is invalid, don't draw fold-lock lines
-                pass
-
-        # Show summary
-        if ui:
-            # Count the lines that were actually drawn
-            lines_inside_box = len([r for r in ring_start_lines if 0 < r < total_length]) + \
-                len([r for r in ring_end_lines if 0 < r < total_length]) + \
-                len(gap_centers)
-
-            # Count wave boundary lines and midlines
-            waves = max(1, crowns_per_ring // 2)
-            crown_waves_count = (waves - 1) if draw_crown_waves else 0
-
-            # Count actual midlines drawn (partial or full)
-            if partial_crown_midlines > 0:
-                midlines_count = min(partial_crown_midlines, waves)
-            else:
-                midlines_count = waves if draw_crown_midlines else 0
-
-            h_midlines_count = num_rings if draw_crown_h_midlines else 0
-
-            # Count actual mid lines drawn (partial or full)
-            if partial_crown_mids > 0:
-                # 1 line per crown
-                mids_count = min(partial_crown_mids, crowns_per_ring)
-            else:
-                mids_count = crowns_per_ring if draw_crown_mids else 0
-
-            # Create coincident points at line intersections if requested
-            points_created = 0
-            constraints_created = 0
-            if create_coincident_points:
-                try:
-                    # Collect all horizontal line Y positions
-                    horizontal_lines = []
-
-                    # Add border lines
-                    if draw_border:
-                        horizontal_lines.extend([0.0, total_length])
-
-                    # Add gap centerlines
-                    if draw_gap_centerlines:
-                        horizontal_lines.extend(gap_centers)
-
-                    # Add crown peaks (ring start positions)
-                    if draw_crown_peaks:
-                        # Add both ring start and ring end lines (as drawn in the actual code)
-                        for ring_start in ring_start_lines:
-                            if 0 < ring_start < total_length:  # Only add if inside the box
-                                horizontal_lines.append(ring_start)
-                        for ring_end in ring_end_lines:
-                            if 0 < ring_end < total_length:  # Only add if inside the box
-                                horizontal_lines.append(ring_end)
-
-                    # Add horizontal crown midlines (ring centers)
-                    if draw_crown_h_midlines:
-                        horizontal_lines.extend(ring_centers)
-
-                    # Collect all vertical line X positions
-                    vertical_lines = []
-
-                    # Add border lines
-                    if draw_border:
-                        vertical_lines.extend([0.0, width_mm])
-
-                    # Add wave boundary lines
-                    if draw_crown_waves:
-                        waves = max(1, crowns_per_ring // 2)
-                        wave_width = width_mm / waves
-                        # Only add lines that are actually drawn (between waves, not at borders)
-                        for w in range(1, waves):
-                            x = w * wave_width
-                            vertical_lines.append(x)
-
-                    # Add wave midlines (full or partial)
-                    if draw_crown_midlines or partial_crown_midlines > 0:
-                        waves = max(1, crowns_per_ring // 2)
-                        wave_width = width_mm / waves
-                        midlines_to_draw = partial_crown_midlines if partial_crown_midlines > 0 else waves
-                        for w in range(min(midlines_to_draw, waves)):
-                            midline_x = (w + 0.5) * wave_width
-                            vertical_lines.append(midline_x)
-
-                    # Add crown mid lines (full or partial)
-                    if draw_crown_mids or partial_crown_mids > 0:
-                        crown_width = width_mm / crowns_per_ring
-                        mids_to_draw = partial_crown_mids if partial_crown_mids > 0 else crowns_per_ring
-                        for crown in range(min(mids_to_draw, crowns_per_ring)):
-                            mid_x = (crown + 0.5) * crown_width
-                            vertical_lines.append(mid_x)
-
-                    # Create points at all intersections and add coincident constraints
-                    created_points = []
-
-                    # Debug: log which horizontal lines we're collecting
-                    debug_info = []
-                    debug_info.append(f"Horizontal lines collected:")
-                    if draw_border:
-                        debug_info.append(f"  Border: 0.0, {total_length}")
-                    if draw_gap_centerlines:
-                        debug_info.append(
-                            f"  Gap centers: {[f'{g:.3f}' for g in gap_centers]}")
-                    if draw_crown_peaks:
-                        ring_starts_inside = [
-                            rs for rs in ring_start_lines if 0 < rs < total_length]
-                        ring_ends_inside = [
-                            re for re in ring_end_lines if 0 < re < total_length]
-                        debug_info.append(
-                            f"  Ring starts: {[f'{rs:.3f}' for rs in ring_starts_inside]}")
-                        debug_info.append(
-                            f"  Ring ends: {[f'{re:.3f}' for re in ring_ends_inside]}")
-                    if draw_crown_h_midlines:
-                        debug_info.append(
-                            f"  Ring centers: {[f'{rc:.3f}' for rc in ring_centers]}")
-
-                    debug_info.append(f"Vertical lines collected:")
-                    if draw_border:
-                        debug_info.append(f"  Border: 0.0, {width_mm}")
-                    if draw_crown_waves:
-                        crown_width = width_mm / crowns_per_ring
-                        wave_lines = [
-                            crown * crown_width for crown in range(1, crowns_per_ring)]
-                        debug_info.append(
-                            f"  Crown waves: {[f'{w:.3f}' for w in wave_lines]}")
-
-                    futil.log('\n'.join(debug_info))
-
-                    for h_y in horizontal_lines:
-                        for v_x in vertical_lines:
-                            # Convert to cm for Fusion (Fusion uses cm internally)
-                            point_x_cm = v_x / 10.0
-                            point_y_cm = h_y / 10.0
-                            point = adsk.core.Point3D.create(
-                                point_x_cm, point_y_cm, 0)
-                            sketch_point = sk.sketchPoints.add(point)
-                            created_points.append((sketch_point, v_x, h_y))
-                            points_created += 1
-
-                    # Create coincident constraints between points and lines
-                    constraints_created = 0
-                    try:
-                        constraints = sk.geometricConstraints
-
-                        # Sort lines into horizontal and vertical for easier matching
-                        horizontal_sketch_lines = []
-                        vertical_sketch_lines = []
-
-                        for line in sk.sketchCurves.sketchLines:
-                            start_pt = line.startSketchPoint.geometry
-                            end_pt = line.endSketchPoint.geometry
-
-                            # Check if horizontal (Y values are the same)
-                            if abs(start_pt.y - end_pt.y) < 0.001:
-                                y_mm = start_pt.y * 10.0  # Convert to mm
-                                horizontal_sketch_lines.append((line, y_mm))
-
-                            # Check if vertical (X values are the same)
-                            elif abs(start_pt.x - end_pt.x) < 0.001:
-                                x_mm = start_pt.x * 10.0  # Convert to mm
-                                vertical_sketch_lines.append((line, x_mm))
-
-                        for sketch_point, x_mm, y_mm in created_points:
-                            # Find horizontal line at this Y position
-                            for line, line_y_mm in horizontal_sketch_lines:
-                                if abs(line_y_mm - y_mm) < 0.01:  # Tighter tolerance
-                                    try:
-                                        constraint = constraints.addCoincident(
-                                            sketch_point, line)
-                                        constraints_created += 1
-                                    except:
-                                        pass  # Skip if constraint fails
-
-                            # Find vertical line at this X position
-                            for line, line_x_mm in vertical_sketch_lines:
-                                if abs(line_x_mm - x_mm) < 0.01:  # Tighter tolerance
-                                    try:
-                                        constraint = constraints.addCoincident(
-                                            sketch_point, line)
-                                        constraints_created += 1
-                                    except:
-                                        pass  # Skip if constraint fails
-
-                    except Exception as constraint_error:
-                        futil.log(
-                            f'Error creating constraints: {str(constraint_error)}')
-                        constraints_created = 0
-
-                except Exception as e:
-                    futil.log(f'Error creating coincident points: {str(e)}')
-
-            waves = max(1, crowns_per_ring // 2)
-            ui.messageBox(
-                f'Stent frame created successfully!\n'
-                f'• Diameter: {diameter_mm:.3f} mm\n'
-                f'• Length: {length_mm:.3f} mm\n'
-                f'• Width (circumference): {width_mm:.3f} mm\n'
-                f'• Rings: {num_rings}\n'
-                f'• Waves per ring: {waves} (crowns: {crowns_per_ring})\n'
-                f'• Scaled ring heights: {[f"{h:.3f}" for h in scaled_ring_heights]}\n'
-                f'• Gap values: {[f"{g:.3f}" for g in gap_values[:num_gaps]]} mm\n'
-                f'• Ring scale factor: {ring_scale_factor:.3f}\n'
-                f'• Horizontal lines inside box: {lines_inside_box}\n'
-                f'• Vertical wave boundaries: {crown_waves_count}\n'
-                f'• Vertical wave midlines: {midlines_count}\n'
-                f'• Vertical crown mid lines: {mids_count}\n'
-                f'• Horizontal crown midlines: {h_midlines_count}\n'
-                f'• Coincident points created: {points_created}\n'
-                f'• Coincident constraints created: {constraints_created}'
-            )
-
-    except Exception as e:
-        try:
-            app = adsk.core.Application.get()
-            ui = app.userInterface
-            ui.messageBox(f'Error creating stent frame: {str(e)}')
-        except:
-            pass
-        import traceback
-        futil.log(f'Error in draw_stent_frame: {traceback.format_exc()}')
 
 
 # This event handler is called when the command terminates.
