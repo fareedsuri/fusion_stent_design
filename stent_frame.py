@@ -44,11 +44,22 @@ def run(context):
         try:
             # Try to import again if it failed initially
             from . import commands
-        except Exception:
+        except Exception as e1:
             try:
                 import commands
-            except Exception:
-                pass
+            except Exception as e2:
+                # If commands module fails, fall back to just the main dialog
+                try:
+                    from .commands.commandDialog import entry as cmdDialog
+                    cmdDialog.start()
+                    return
+                except Exception as e3:
+                    try:
+                        from commands.commandDialog import entry as cmdDialog
+                        cmdDialog.start()
+                        return
+                    except Exception as e4:
+                        raise Exception(f"Failed all import attempts: {e1}, {e2}, {e3}, {e4}")
 
     try:
         if commands:
