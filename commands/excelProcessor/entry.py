@@ -27,6 +27,7 @@ except ImportError:
             def log(self, msg): print(f"LOG: {msg}")
             def add_handler(self, *args, **kwargs): pass
         futil = FakeUtil()
+
         class FakeConfig:
             COMPANY_NAME = 'ACME'
             ADDIN_NAME = 'stent_frame'

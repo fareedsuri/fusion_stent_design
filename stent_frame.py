@@ -7,12 +7,18 @@ import math
 import traceback
 
 # Global variables to store modules
-commands = None
+cmdDialog = None
+excelProcessor = None
 
 try:
     import adsk.core
     import adsk.fusion
-    from . import commands
+    from .commands.commandDialog import entry as cmdDialog
+    # Try to import Excel processor separately
+    try:
+        from .commands.excelProcessor import entry as excelProcessor
+    except Exception:
+        excelProcessor = None
 except Exception:
     # Try alternative import for when running as script
     try:
@@ -24,7 +30,12 @@ except Exception:
         if current_dir not in sys.path:
             sys.path.append(current_dir)
 
-        import commands
+        from commands.commandDialog import entry as cmdDialog
+        # Try to import Excel processor separately
+        try:
+            from commands.excelProcessor import entry as excelProcessor
+        except Exception:
+            excelProcessor = None
     except Exception:
         pass
 
@@ -37,35 +48,44 @@ def mm_to_cm(x):
 
 
 def run(context):
-    """Main entry point - starts all commands"""
-    global commands
+    """Main entry point - starts the command dialog and Excel processor"""
+    global cmdDialog, excelProcessor
 
-    if commands is None:
+    # First, ensure we have the main command
+    if cmdDialog is None:
         try:
             # Try to import again if it failed initially
-            from . import commands
-        except Exception as e1:
+            from .commands.commandDialog import entry as cmdDialog
+        except Exception:
             try:
-                import commands
-            except Exception as e2:
-                # If commands module fails, fall back to just the main dialog
-                try:
-                    from .commands.commandDialog import entry as cmdDialog
-                    cmdDialog.start()
-                    return
-                except Exception as e3:
-                    try:
-                        from commands.commandDialog import entry as cmdDialog
-                        cmdDialog.start()
-                        return
-                    except Exception as e4:
-                        raise Exception(f"Failed all import attempts: {e1}, {e2}, {e3}, {e4}")
+                from commands.commandDialog import entry as cmdDialog
+            except Exception:
+                pass
+
+    # Try to import Excel processor if we haven't already
+    if excelProcessor is None:
+        try:
+            from .commands.excelProcessor import entry as excelProcessor
+        except Exception:
+            try:
+                from commands.excelProcessor import entry as excelProcessor
+            except Exception:
+                pass
 
     try:
-        if commands:
-            commands.start()
+        # Start the main command (this must work)
+        if cmdDialog:
+            cmdDialog.start()
         else:
-            raise Exception("Could not import commands module")
+            raise Exception("Could not import main command dialog module")
+
+        # Start Excel processor if available
+        if excelProcessor:
+            try:
+                excelProcessor.start()
+            except Exception as e:
+                print(f"Warning: Excel processor failed to start: {e}")
+
     except Exception as e:
         ui = None
         try:
@@ -83,9 +103,15 @@ def run(context):
 
 def stop(context):
     """Stop the add-in"""
-    global commands
+    global cmdDialog, excelProcessor
     try:
-        if commands:
-            commands.stop()
+        if cmdDialog:
+            cmdDialog.stop()
+    except Exception:
+        pass
+    
+    try:
+        if excelProcessor:
+            excelProcessor.stop()
     except Exception:
         pass
