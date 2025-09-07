@@ -7,13 +7,13 @@ from .commandDialog import entry as commandDialog
 from .paletteShow import entry as paletteShow
 from .paletteSend import entry as paletteSend
 
-# Try to import Excel processor, but don't fail if it has issues
-excelProcessor = None
+# Try to import GPT Data processor, but don't fail if it has issues
+gptDataProcessor = None
 try:
-    from .excelProcessor import entry as excelProcessor
+    from .gptDataProcessor import entry as gptDataProcessor
 except Exception as e:
-    print(f"Warning: Could not import excelProcessor: {e}")
-    excelProcessor = None
+    print(f"Warning: Could not import gptDataProcessor: {e}")
+    gptDataProcessor = None
 
 # TODO add your imported modules to this list.
 # Fusion will automatically call the start() and stop() functions.
@@ -23,9 +23,9 @@ commands = [
     paletteSend
 ]
 
-# Add Excel processor only if it imported successfully
-if excelProcessor:
-    commands.append(excelProcessor)
+# Add GPT Data processor only if it imported successfully
+if gptDataProcessor:
+    commands.append(gptDataProcessor)
 
 
 # Assumes you defined a "start" function in each of your modules.

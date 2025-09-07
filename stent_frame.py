@@ -8,17 +8,17 @@ import traceback
 
 # Global variables to store modules
 cmdDialog = None
-excelProcessor = None
+gptDataProcessor = None
 
 try:
     import adsk.core
     import adsk.fusion
     from .commands.commandDialog import entry as cmdDialog
-    # Try to import Excel processor separately
+    # Try to import GPT Data processor separately
     try:
-        from .commands.excelProcessor import entry as excelProcessor
+        from .commands.gptDataProcessor import entry as gptDataProcessor
     except Exception:
-        excelProcessor = None
+        gptDataProcessor = None
 except Exception:
     # Try alternative import for when running as script
     try:
@@ -31,11 +31,11 @@ except Exception:
             sys.path.append(current_dir)
 
         from commands.commandDialog import entry as cmdDialog
-        # Try to import Excel processor separately
+        # Try to import GPT Data processor separately
         try:
-            from commands.excelProcessor import entry as excelProcessor
+            from commands.gptDataProcessor import entry as gptDataProcessor
         except Exception:
-            excelProcessor = None
+            gptDataProcessor = None
     except Exception:
         pass
 
@@ -48,43 +48,66 @@ def mm_to_cm(x):
 
 
 def run(context):
-    """Main entry point - starts the command dialog and Excel processor"""
-    global cmdDialog, excelProcessor
+    """Main entry point - starts the command dialog and GPT Data processor"""
+    global cmdDialog, gptDataProcessor
+
+    print("DEBUG: Starting Stent Frame add-in...")
 
     # First, ensure we have the main command
     if cmdDialog is None:
         try:
+            print("DEBUG: Attempting to import cmdDialog...")
             # Try to import again if it failed initially
             from .commands.commandDialog import entry as cmdDialog
-        except Exception:
+            print("DEBUG: cmdDialog imported successfully")
+        except Exception as e:
+            print(f"DEBUG: cmdDialog import 1 failed: {e}")
             try:
                 from commands.commandDialog import entry as cmdDialog
-            except Exception:
+                print("DEBUG: cmdDialog imported successfully (fallback)")
+            except Exception as e2:
+                print(f"DEBUG: cmdDialog import 2 failed: {e2}")
                 pass
 
-    # Try to import Excel processor if we haven't already
-    if excelProcessor is None:
+    # Try to import GPT Data processor if we haven't already
+    if gptDataProcessor is None:
         try:
-            from .commands.excelProcessor import entry as excelProcessor
-        except Exception:
+            print("DEBUG: Attempting to import gptDataProcessor...")
+            from .commands.gptDataProcessor import entry as gptDataProcessor
+            print("DEBUG: gptDataProcessor imported successfully")
+        except Exception as e:
+            print(f"DEBUG: gptDataProcessor import 1 failed: {e}")
             try:
-                from commands.excelProcessor import entry as excelProcessor
-            except Exception:
+                from commands.gptDataProcessor import entry as gptDataProcessor
+                print("DEBUG: gptDataProcessor imported successfully (fallback)")
+            except Exception as e2:
+                print(f"DEBUG: gptDataProcessor import 2 failed: {e2}")
                 pass
 
     try:
         # Start the main command (this must work)
         if cmdDialog:
+            print("DEBUG: Starting cmdDialog...")
             cmdDialog.start()
+            print("DEBUG: cmdDialog started successfully")
         else:
             raise Exception("Could not import main command dialog module")
 
-        # Start Excel processor if available
-        if excelProcessor:
+        # Start GPT Data processor if available
+        if gptDataProcessor:
             try:
-                excelProcessor.start()
+                print("DEBUG: Starting gptDataProcessor...")
+                gptDataProcessor.start()
+                print("DEBUG: gptDataProcessor started successfully")
             except Exception as e:
-                print(f"Warning: Excel processor failed to start: {e}")
+                print(f"WARNING: GPT Data processor failed to start: {e}")
+                import traceback
+                print(
+                    f"GPT Data processor traceback: {traceback.format_exc()}")
+        else:
+            print("DEBUG: gptDataProcessor is None, not starting")
+
+        print("DEBUG: Stent Frame add-in startup completed")
 
     except Exception as e:
         ui = None
@@ -103,15 +126,15 @@ def run(context):
 
 def stop(context):
     """Stop the add-in"""
-    global cmdDialog, excelProcessor
+    global cmdDialog, gptDataProcessor
     try:
         if cmdDialog:
             cmdDialog.stop()
     except Exception:
         pass
-    
+
     try:
-        if excelProcessor:
-            excelProcessor.stop()
+        if gptDataProcessor:
+            gptDataProcessor.stop()
     except Exception:
         pass
