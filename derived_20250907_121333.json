@@ -1,0 +1,2329 @@
+{
+  "meta": {
+    "generated_at": "2025-09-07T12:13:33",
+    "units": "mm (angles in deg)"
+  },
+  "parameters": {
+    "diameter_mm": 1.8,
+    "length_mm": 8.0,
+    "num_rings": 6,
+    "crowns_per_ring": 8,
+    "height_factors": [
+      1.2,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.1
+    ],
+    "strut_width_mm_by_ring": [
+      0.06,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.06
+    ],
+    "R_factor": 2.5,
+    "angle_per_crown_deg": 45.0,
+    "x_keepout_min_mm": 0.01,
+    "circumference_mm": 5.654866776461628,
+    "pitch_mm": 0.7068583470577035
+  },
+  "links": {
+    "interfaces": [
+      "1-2",
+      "2-3",
+      "3-4",
+      "4-5",
+      "5-6"
+    ],
+    "matrix_cols": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "matrix": [
+      [
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0
+      ]
+    ]
+  },
+  "gaps_policy": {
+    "body_unlinked_mm": 0.16,
+    "body_linked_mm": 0.17,
+    "end_linked_mm": 0.175,
+    "end_unlinked_prox_mm": 0.095,
+    "end_unlinked_dist_mm": 0.1
+  },
+  "gaps_matrix": [
+    [
+      0.175,
+      0.095,
+      0.175,
+      0.095,
+      0.175,
+      0.095,
+      0.175,
+      0.095
+    ],
+    [
+      0.16,
+      0.17,
+      0.16,
+      0.17,
+      0.16,
+      0.17,
+      0.16,
+      0.16
+    ],
+    [
+      0.17,
+      0.16,
+      0.16,
+      0.16,
+      0.17,
+      0.16,
+      0.16,
+      0.16
+    ],
+    [
+      0.16,
+      0.17,
+      0.16,
+      0.17,
+      0.16,
+      0.17,
+      0.16,
+      0.16
+    ],
+    [
+      0.175,
+      0.1,
+      0.175,
+      0.1,
+      0.175,
+      0.1,
+      0.175,
+      0.1
+    ]
+  ],
+  "sum_gaps_in_col_mm": [
+    0.8400000000000001,
+    0.6950000000000001,
+    0.8300000000000001,
+    0.6950000000000001,
+    0.8400000000000001,
+    0.6950000000000001,
+    0.8300000000000001,
+    0.675
+  ],
+  "scale_mm_per_factor_by_col": [
+    1.1365079365079365,
+    1.1595238095238094,
+    1.138095238095238,
+    1.1595238095238094,
+    1.1365079365079365,
+    1.1595238095238094,
+    1.138095238095238,
+    1.1626984126984128
+  ],
+  "ring_heights_mm": [
+    [
+      1.3638095238095238,
+      1.3914285714285712,
+      1.3657142857142857,
+      1.3914285714285712,
+      1.3638095238095238,
+      1.3914285714285712,
+      1.3657142857142857,
+      1.3952380952380954
+    ],
+    [
+      1.1365079365079365,
+      1.1595238095238094,
+      1.138095238095238,
+      1.1595238095238094,
+      1.1365079365079365,
+      1.1595238095238094,
+      1.138095238095238,
+      1.1626984126984128
+    ],
+    [
+      1.1365079365079365,
+      1.1595238095238094,
+      1.138095238095238,
+      1.1595238095238094,
+      1.1365079365079365,
+      1.1595238095238094,
+      1.138095238095238,
+      1.1626984126984128
+    ],
+    [
+      1.1365079365079365,
+      1.1595238095238094,
+      1.138095238095238,
+      1.1595238095238094,
+      1.1365079365079365,
+      1.1595238095238094,
+      1.138095238095238,
+      1.1626984126984128
+    ],
+    [
+      1.1365079365079365,
+      1.1595238095238094,
+      1.138095238095238,
+      1.1595238095238094,
+      1.1365079365079365,
+      1.1595238095238094,
+      1.138095238095238,
+      1.1626984126984128
+    ],
+    [
+      1.2501587301587302,
+      1.2754761904761904,
+      1.2519047619047619,
+      1.2754761904761904,
+      1.2501587301587302,
+      1.2754761904761904,
+      1.2519047619047619,
+      1.278968253968254
+    ]
+  ],
+  "stack_positions_by_column": [
+    {
+      "col": 0,
+      "ring_top_y_mm": [
+        0.0,
+        1.5388095238095238,
+        2.8353174603174605,
+        4.141825396825397,
+        5.438333333333334,
+        6.74984126984127
+      ],
+      "ring_bottom_y_mm": [
+        1.3638095238095238,
+        2.6753174603174603,
+        3.971825396825397,
+        5.278333333333334,
+        6.57484126984127,
+        8.0
+      ],
+      "y_bottom_of_stent_mm": 8.0
+    },
+    {
+      "col": 1,
+      "ring_top_y_mm": [
+        0.0,
+        1.4864285714285712,
+        2.8159523809523805,
+        4.13547619047619,
+        5.465,
+        6.724523809523809
+      ],
+      "ring_bottom_y_mm": [
+        1.3914285714285712,
+        2.6459523809523806,
+        3.97547619047619,
+        5.295,
+        6.62452380952381,
+        8.0
+      ],
+      "y_bottom_of_stent_mm": 8.0
+    },
+    {
+      "col": 2,
+      "ring_top_y_mm": [
+        0.0,
+        1.5407142857142857,
+        2.838809523809524,
+        4.136904761904762,
+        5.4350000000000005,
+        6.748095238095238
+      ],
+      "ring_bottom_y_mm": [
+        1.3657142857142857,
+        2.678809523809524,
+        3.976904761904762,
+        5.275,
+        6.573095238095238,
+        8.0
+      ],
+      "y_bottom_of_stent_mm": 8.0
+    },
+    {
+      "col": 3,
+      "ring_top_y_mm": [
+        0.0,
+        1.4864285714285712,
+        2.8159523809523805,
+        4.13547619047619,
+        5.465,
+        6.724523809523809
+      ],
+      "ring_bottom_y_mm": [
+        1.3914285714285712,
+        2.6459523809523806,
+        3.97547619047619,
+        5.295,
+        6.62452380952381,
+        8.0
+      ],
+      "y_bottom_of_stent_mm": 8.0
+    },
+    {
+      "col": 4,
+      "ring_top_y_mm": [
+        0.0,
+        1.5388095238095238,
+        2.8353174603174605,
+        4.141825396825397,
+        5.438333333333334,
+        6.74984126984127
+      ],
+      "ring_bottom_y_mm": [
+        1.3638095238095238,
+        2.6753174603174603,
+        3.971825396825397,
+        5.278333333333334,
+        6.57484126984127,
+        8.0
+      ],
+      "y_bottom_of_stent_mm": 8.0
+    },
+    {
+      "col": 5,
+      "ring_top_y_mm": [
+        0.0,
+        1.4864285714285712,
+        2.8159523809523805,
+        4.13547619047619,
+        5.465,
+        6.724523809523809
+      ],
+      "ring_bottom_y_mm": [
+        1.3914285714285712,
+        2.6459523809523806,
+        3.97547619047619,
+        5.295,
+        6.62452380952381,
+        8.0
+      ],
+      "y_bottom_of_stent_mm": 8.0
+    },
+    {
+      "col": 6,
+      "ring_top_y_mm": [
+        0.0,
+        1.5407142857142857,
+        2.838809523809524,
+        4.136904761904762,
+        5.4350000000000005,
+        6.748095238095238
+      ],
+      "ring_bottom_y_mm": [
+        1.3657142857142857,
+        2.678809523809524,
+        3.976904761904762,
+        5.275,
+        6.573095238095238,
+        8.0
+      ],
+      "y_bottom_of_stent_mm": 8.0
+    },
+    {
+      "col": 7,
+      "ring_top_y_mm": [
+        0.0,
+        1.4902380952380954,
+        2.8129365079365085,
+        4.135634920634922,
+        5.458333333333335,
+        6.7210317460317475
+      ],
+      "ring_bottom_y_mm": [
+        1.3952380952380954,
+        2.6529365079365084,
+        3.9756349206349215,
+        5.298333333333335,
+        6.621031746031748,
+        8.000000000000002
+      ],
+      "y_bottom_of_stent_mm": 8.000000000000002
+    }
+  ],
+  "cells": [
+    {
+      "ring": 1,
+      "col": 0,
+      "x_left_mm": 0.0,
+      "x_right_mm": 0.706858,
+      "y_top_edge_mm": 0.17209,
+      "y_bottom_edge_mm": 1.19172,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          0.017835,
+          1.36381
+        ],
+        [
+          0.317418,
+          1.36381
+        ]
+      ],
+      "right_cl": [
+        [
+          0.389441,
+          0.0
+        ],
+        [
+          0.689023,
+          0.0
+        ]
+      ],
+      "Rc_mm": 0.15,
+      "theta_deg": 173.954042,
+      "delta_deg": 86.977021,
+      "chord_center_len_mm": 0.299583,
+      "sagitta_center_mm": 0.14209,
+      "M_mm": 0.17209,
+      "x_keepout_mm": 0.017835,
+      "x_keepout_raw_mm": 0.017835,
+      "x_keepout_max_mm": 0.053847,
+      "alpha_deg": -86.977021
+    },
+    {
+      "ring": 1,
+      "col": 1,
+      "x_left_mm": 0.706858,
+      "x_right_mm": 1.413717,
+      "y_top_edge_mm": 0.172298,
+      "y_bottom_edge_mm": 1.219131,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          0.724912,
+          0.0
+        ],
+        [
+          1.024516,
+          0.0
+        ]
+      ],
+      "right_cl": [
+        [
+          1.096059,
+          1.391429
+        ],
+        [
+          1.395663,
+          1.391429
+        ]
+      ],
+      "Rc_mm": 0.15,
+      "theta_deg": 174.113239,
+      "delta_deg": 87.056619,
+      "chord_center_len_mm": 0.299604,
+      "sagitta_center_mm": 0.142298,
+      "M_mm": 0.172298,
+      "x_keepout_mm": 0.018053,
+      "x_keepout_raw_mm": 0.018053,
+      "x_keepout_max_mm": 0.053825,
+      "alpha_deg": 87.056619
+    },
+    {
+      "ring": 1,
+      "col": 2,
+      "x_left_mm": 1.413717,
+      "x_right_mm": 2.120575,
+      "y_top_edge_mm": 0.172104,
+      "y_bottom_edge_mm": 1.19361,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          1.431567,
+          1.365714
+        ],
+        [
+          1.731151,
+          1.365714
+        ]
+      ],
+      "right_cl": [
+        [
+          1.80314,
+          0.0
+        ],
+        [
+          2.102724,
+          0.0
+        ]
+      ],
+      "Rc_mm": 0.15,
+      "theta_deg": 173.965294,
+      "delta_deg": 86.982647,
+      "chord_center_len_mm": 0.299584,
+      "sagitta_center_mm": 0.142104,
+      "M_mm": 0.172104,
+      "x_keepout_mm": 0.017851,
+      "x_keepout_raw_mm": 0.017851,
+      "x_keepout_max_mm": 0.053845,
+      "alpha_deg": -86.982647
+    },
+    {
+      "ring": 1,
+      "col": 3,
+      "x_left_mm": 2.120575,
+      "x_right_mm": 2.827433,
+      "y_top_edge_mm": 0.172298,
+      "y_bottom_edge_mm": 1.219131,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          2.138628,
+          0.0
+        ],
+        [
+          2.438233,
+          0.0
+        ]
+      ],
+      "right_cl": [
+        [
+          2.509776,
+          1.391429
+        ],
+        [
+          2.80938,
+          1.391429
+        ]
+      ],
+      "Rc_mm": 0.15,
+      "theta_deg": 174.113239,
+      "delta_deg": 87.056619,
+      "chord_center_len_mm": 0.299604,
+      "sagitta_center_mm": 0.142298,
+      "M_mm": 0.172298,
+      "x_keepout_mm": 0.018053,
+      "x_keepout_raw_mm": 0.018053,
+      "x_keepout_max_mm": 0.053825,
+      "alpha_deg": 87.056619
+    },
+    {
+      "ring": 1,
+      "col": 4,
+      "x_left_mm": 2.827433,
+      "x_right_mm": 3.534292,
+      "y_top_edge_mm": 0.17209,
+      "y_bottom_edge_mm": 1.19172,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          2.845269,
+          1.36381
+        ],
+        [
+          3.144851,
+          1.36381
+        ]
+      ],
+      "right_cl": [
+        [
+          3.216874,
+          0.0
+        ],
+        [
+          3.516456,
+          0.0
+        ]
+      ],
+      "Rc_mm": 0.15,
+      "theta_deg": 173.954042,
+      "delta_deg": 86.977021,
+      "chord_center_len_mm": 0.299583,
+      "sagitta_center_mm": 0.14209,
+      "M_mm": 0.17209,
+      "x_keepout_mm": 0.017835,
+      "x_keepout_raw_mm": 0.017835,
+      "x_keepout_max_mm": 0.053847,
+      "alpha_deg": -86.977021
+    },
+    {
+      "ring": 1,
+      "col": 5,
+      "x_left_mm": 3.534292,
+      "x_right_mm": 4.24115,
+      "y_top_edge_mm": 0.172298,
+      "y_bottom_edge_mm": 1.219131,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          3.552345,
+          0.0
+        ],
+        [
+          3.851949,
+          0.0
+        ]
+      ],
+      "right_cl": [
+        [
+          3.923492,
+          1.391429
+        ],
+        [
+          4.223097,
+          1.391429
+        ]
+      ],
+      "Rc_mm": 0.15,
+      "theta_deg": 174.113239,
+      "delta_deg": 87.056619,
+      "chord_center_len_mm": 0.299604,
+      "sagitta_center_mm": 0.142298,
+      "M_mm": 0.172298,
+      "x_keepout_mm": 0.018053,
+      "x_keepout_raw_mm": 0.018053,
+      "x_keepout_max_mm": 0.053825,
+      "alpha_deg": 87.056619
+    },
+    {
+      "ring": 1,
+      "col": 6,
+      "x_left_mm": 4.24115,
+      "x_right_mm": 4.948008,
+      "y_top_edge_mm": 0.172104,
+      "y_bottom_edge_mm": 1.19361,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          4.259001,
+          1.365714
+        ],
+        [
+          4.558585,
+          1.365714
+        ]
+      ],
+      "right_cl": [
+        [
+          4.630574,
+          0.0
+        ],
+        [
+          4.930158,
+          0.0
+        ]
+      ],
+      "Rc_mm": 0.15,
+      "theta_deg": 173.965294,
+      "delta_deg": 86.982647,
+      "chord_center_len_mm": 0.299584,
+      "sagitta_center_mm": 0.142104,
+      "M_mm": 0.172104,
+      "x_keepout_mm": 0.017851,
+      "x_keepout_raw_mm": 0.017851,
+      "x_keepout_max_mm": 0.053845,
+      "alpha_deg": -86.982647
+    },
+    {
+      "ring": 1,
+      "col": 7,
+      "x_left_mm": 4.948008,
+      "x_right_mm": 5.654867,
+      "y_top_edge_mm": 0.172325,
+      "y_bottom_edge_mm": 1.222913,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          4.966091,
+          0.0
+        ],
+        [
+          5.265698,
+          0.0
+        ]
+      ],
+      "right_cl": [
+        [
+          5.337177,
+          1.395238
+        ],
+        [
+          5.636784,
+          1.395238
+        ]
+      ],
+      "Rc_mm": 0.15,
+      "theta_deg": 174.134547,
+      "delta_deg": 87.067273,
+      "chord_center_len_mm": 0.299607,
+      "sagitta_center_mm": 0.142325,
+      "M_mm": 0.172325,
+      "x_keepout_mm": 0.018083,
+      "x_keepout_raw_mm": 0.018083,
+      "x_keepout_max_mm": 0.053822,
+      "alpha_deg": 87.067273
+    },
+    {
+      "ring": 2,
+      "col": 0,
+      "x_left_mm": 0.0,
+      "x_right_mm": 0.706858,
+      "y_top_edge_mm": 1.673739,
+      "y_bottom_edge_mm": 2.540388,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          0.036239,
+          1.53881
+        ],
+        [
+          0.284416,
+          1.53881
+        ]
+      ],
+      "right_cl": [
+        [
+          0.422442,
+          2.675317
+        ],
+        [
+          0.670619,
+          2.675317
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.150908,
+      "delta_deg": 83.075454,
+      "chord_center_len_mm": 0.248176,
+      "sagitta_center_mm": 0.10993,
+      "M_mm": 0.13493,
+      "x_keepout_mm": 0.036239,
+      "x_keepout_raw_mm": 0.036239,
+      "x_keepout_max_mm": 0.105253,
+      "alpha_deg": 83.075454
+    },
+    {
+      "ring": 2,
+      "col": 1,
+      "x_left_mm": 0.706858,
+      "x_right_mm": 1.413717,
+      "y_top_edge_mm": 1.621743,
+      "y_bottom_edge_mm": 2.510638,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          0.74343,
+          2.645952
+        ],
+        [
+          0.991699,
+          2.645952
+        ]
+      ],
+      "right_cl": [
+        [
+          1.128876,
+          1.486429
+        ],
+        [
+          1.377145,
+          1.486429
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.505995,
+      "delta_deg": 83.252997,
+      "chord_center_len_mm": 0.248269,
+      "sagitta_center_mm": 0.110314,
+      "M_mm": 0.135314,
+      "x_keepout_mm": 0.036572,
+      "x_keepout_raw_mm": 0.036572,
+      "x_keepout_max_mm": 0.105161,
+      "alpha_deg": -83.252997
+    },
+    {
+      "ring": 2,
+      "col": 2,
+      "x_left_mm": 1.413717,
+      "x_right_mm": 2.120575,
+      "y_top_edge_mm": 1.675671,
+      "y_bottom_edge_mm": 2.543853,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          1.449979,
+          1.540714
+        ],
+        [
+          1.698163,
+          1.540714
+        ]
+      ],
+      "right_cl": [
+        [
+          1.836129,
+          2.67881
+        ],
+        [
+          2.084312,
+          2.67881
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.175982,
+      "delta_deg": 83.087991,
+      "chord_center_len_mm": 0.248183,
+      "sagitta_center_mm": 0.109957,
+      "M_mm": 0.134957,
+      "x_keepout_mm": 0.036263,
+      "x_keepout_raw_mm": 0.036263,
+      "x_keepout_max_mm": 0.105246,
+      "alpha_deg": 83.087991
+    },
+    {
+      "ring": 2,
+      "col": 3,
+      "x_left_mm": 2.120575,
+      "x_right_mm": 2.827433,
+      "y_top_edge_mm": 1.621743,
+      "y_bottom_edge_mm": 2.510638,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          2.157147,
+          2.645952
+        ],
+        [
+          2.405416,
+          2.645952
+        ]
+      ],
+      "right_cl": [
+        [
+          2.542593,
+          1.486429
+        ],
+        [
+          2.790861,
+          1.486429
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.505995,
+      "delta_deg": 83.252997,
+      "chord_center_len_mm": 0.248269,
+      "sagitta_center_mm": 0.110314,
+      "M_mm": 0.135314,
+      "x_keepout_mm": 0.036572,
+      "x_keepout_raw_mm": 0.036572,
+      "x_keepout_max_mm": 0.105161,
+      "alpha_deg": -83.252997
+    },
+    {
+      "ring": 2,
+      "col": 4,
+      "x_left_mm": 2.827433,
+      "x_right_mm": 3.534292,
+      "y_top_edge_mm": 1.673739,
+      "y_bottom_edge_mm": 2.540388,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          2.863673,
+          1.53881
+        ],
+        [
+          3.111849,
+          1.53881
+        ]
+      ],
+      "right_cl": [
+        [
+          3.249876,
+          2.675317
+        ],
+        [
+          3.498052,
+          2.675317
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.150908,
+      "delta_deg": 83.075454,
+      "chord_center_len_mm": 0.248176,
+      "sagitta_center_mm": 0.10993,
+      "M_mm": 0.13493,
+      "x_keepout_mm": 0.036239,
+      "x_keepout_raw_mm": 0.036239,
+      "x_keepout_max_mm": 0.105253,
+      "alpha_deg": 83.075454
+    },
+    {
+      "ring": 2,
+      "col": 5,
+      "x_left_mm": 3.534292,
+      "x_right_mm": 4.24115,
+      "y_top_edge_mm": 1.621743,
+      "y_bottom_edge_mm": 2.510638,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          3.570864,
+          2.645952
+        ],
+        [
+          3.819132,
+          2.645952
+        ]
+      ],
+      "right_cl": [
+        [
+          3.956309,
+          1.486429
+        ],
+        [
+          4.204578,
+          1.486429
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.505995,
+      "delta_deg": 83.252997,
+      "chord_center_len_mm": 0.248269,
+      "sagitta_center_mm": 0.110314,
+      "M_mm": 0.135314,
+      "x_keepout_mm": 0.036572,
+      "x_keepout_raw_mm": 0.036572,
+      "x_keepout_max_mm": 0.105161,
+      "alpha_deg": -83.252997
+    },
+    {
+      "ring": 2,
+      "col": 6,
+      "x_left_mm": 4.24115,
+      "x_right_mm": 4.948008,
+      "y_top_edge_mm": 1.675671,
+      "y_bottom_edge_mm": 2.543853,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          4.277413,
+          1.540714
+        ],
+        [
+          4.525596,
+          1.540714
+        ]
+      ],
+      "right_cl": [
+        [
+          4.663563,
+          2.67881
+        ],
+        [
+          4.911746,
+          2.67881
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.175982,
+      "delta_deg": 83.087991,
+      "chord_center_len_mm": 0.248183,
+      "sagitta_center_mm": 0.109957,
+      "M_mm": 0.134957,
+      "x_keepout_mm": 0.036263,
+      "x_keepout_raw_mm": 0.036263,
+      "x_keepout_max_mm": 0.105246,
+      "alpha_deg": 83.087991
+    },
+    {
+      "ring": 2,
+      "col": 7,
+      "x_left_mm": 4.948008,
+      "x_right_mm": 5.654867,
+      "y_top_edge_mm": 1.625604,
+      "y_bottom_edge_mm": 2.517571,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          4.984625,
+          2.652937
+        ],
+        [
+          5.232906,
+          2.652937
+        ]
+      ],
+      "right_cl": [
+        [
+          5.369969,
+          1.490238
+        ],
+        [
+          5.61825,
+          1.490238
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.553578,
+      "delta_deg": 83.276789,
+      "chord_center_len_mm": 0.248281,
+      "sagitta_center_mm": 0.110366,
+      "M_mm": 0.135366,
+      "x_keepout_mm": 0.036617,
+      "x_keepout_raw_mm": 0.036617,
+      "x_keepout_max_mm": 0.105148,
+      "alpha_deg": -83.276789
+    },
+    {
+      "ring": 3,
+      "col": 0,
+      "x_left_mm": 0.0,
+      "x_right_mm": 0.706858,
+      "y_top_edge_mm": 2.970247,
+      "y_bottom_edge_mm": 3.836896,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          0.036239,
+          3.971825
+        ],
+        [
+          0.284416,
+          3.971825
+        ]
+      ],
+      "right_cl": [
+        [
+          0.422442,
+          2.835317
+        ],
+        [
+          0.670619,
+          2.835317
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.150908,
+      "delta_deg": 83.075454,
+      "chord_center_len_mm": 0.248176,
+      "sagitta_center_mm": 0.10993,
+      "M_mm": 0.13493,
+      "x_keepout_mm": 0.036239,
+      "x_keepout_raw_mm": 0.036239,
+      "x_keepout_max_mm": 0.105253,
+      "alpha_deg": -83.075454
+    },
+    {
+      "ring": 3,
+      "col": 1,
+      "x_left_mm": 0.706858,
+      "x_right_mm": 1.413717,
+      "y_top_edge_mm": 2.951267,
+      "y_bottom_edge_mm": 3.840162,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          0.74343,
+          2.815952
+        ],
+        [
+          0.991699,
+          2.815952
+        ]
+      ],
+      "right_cl": [
+        [
+          1.128876,
+          3.975476
+        ],
+        [
+          1.377145,
+          3.975476
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.505995,
+      "delta_deg": 83.252997,
+      "chord_center_len_mm": 0.248269,
+      "sagitta_center_mm": 0.110314,
+      "M_mm": 0.135314,
+      "x_keepout_mm": 0.036572,
+      "x_keepout_raw_mm": 0.036572,
+      "x_keepout_max_mm": 0.105161,
+      "alpha_deg": 83.252997
+    },
+    {
+      "ring": 3,
+      "col": 2,
+      "x_left_mm": 1.413717,
+      "x_right_mm": 2.120575,
+      "y_top_edge_mm": 2.973766,
+      "y_bottom_edge_mm": 3.841948,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          1.449979,
+          3.976905
+        ],
+        [
+          1.698163,
+          3.976905
+        ]
+      ],
+      "right_cl": [
+        [
+          1.836129,
+          2.83881
+        ],
+        [
+          2.084312,
+          2.83881
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.175982,
+      "delta_deg": 83.087991,
+      "chord_center_len_mm": 0.248183,
+      "sagitta_center_mm": 0.109957,
+      "M_mm": 0.134957,
+      "x_keepout_mm": 0.036263,
+      "x_keepout_raw_mm": 0.036263,
+      "x_keepout_max_mm": 0.105246,
+      "alpha_deg": -83.087991
+    },
+    {
+      "ring": 3,
+      "col": 3,
+      "x_left_mm": 2.120575,
+      "x_right_mm": 2.827433,
+      "y_top_edge_mm": 2.951267,
+      "y_bottom_edge_mm": 3.840162,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          2.157147,
+          2.815952
+        ],
+        [
+          2.405416,
+          2.815952
+        ]
+      ],
+      "right_cl": [
+        [
+          2.542593,
+          3.975476
+        ],
+        [
+          2.790861,
+          3.975476
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.505995,
+      "delta_deg": 83.252997,
+      "chord_center_len_mm": 0.248269,
+      "sagitta_center_mm": 0.110314,
+      "M_mm": 0.135314,
+      "x_keepout_mm": 0.036572,
+      "x_keepout_raw_mm": 0.036572,
+      "x_keepout_max_mm": 0.105161,
+      "alpha_deg": 83.252997
+    },
+    {
+      "ring": 3,
+      "col": 4,
+      "x_left_mm": 2.827433,
+      "x_right_mm": 3.534292,
+      "y_top_edge_mm": 2.970247,
+      "y_bottom_edge_mm": 3.836896,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          2.863673,
+          3.971825
+        ],
+        [
+          3.111849,
+          3.971825
+        ]
+      ],
+      "right_cl": [
+        [
+          3.249876,
+          2.835317
+        ],
+        [
+          3.498052,
+          2.835317
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.150908,
+      "delta_deg": 83.075454,
+      "chord_center_len_mm": 0.248176,
+      "sagitta_center_mm": 0.10993,
+      "M_mm": 0.13493,
+      "x_keepout_mm": 0.036239,
+      "x_keepout_raw_mm": 0.036239,
+      "x_keepout_max_mm": 0.105253,
+      "alpha_deg": -83.075454
+    },
+    {
+      "ring": 3,
+      "col": 5,
+      "x_left_mm": 3.534292,
+      "x_right_mm": 4.24115,
+      "y_top_edge_mm": 2.951267,
+      "y_bottom_edge_mm": 3.840162,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          3.570864,
+          2.815952
+        ],
+        [
+          3.819132,
+          2.815952
+        ]
+      ],
+      "right_cl": [
+        [
+          3.956309,
+          3.975476
+        ],
+        [
+          4.204578,
+          3.975476
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.505995,
+      "delta_deg": 83.252997,
+      "chord_center_len_mm": 0.248269,
+      "sagitta_center_mm": 0.110314,
+      "M_mm": 0.135314,
+      "x_keepout_mm": 0.036572,
+      "x_keepout_raw_mm": 0.036572,
+      "x_keepout_max_mm": 0.105161,
+      "alpha_deg": 83.252997
+    },
+    {
+      "ring": 3,
+      "col": 6,
+      "x_left_mm": 4.24115,
+      "x_right_mm": 4.948008,
+      "y_top_edge_mm": 2.973766,
+      "y_bottom_edge_mm": 3.841948,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          4.277413,
+          3.976905
+        ],
+        [
+          4.525596,
+          3.976905
+        ]
+      ],
+      "right_cl": [
+        [
+          4.663563,
+          2.83881
+        ],
+        [
+          4.911746,
+          2.83881
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.175982,
+      "delta_deg": 83.087991,
+      "chord_center_len_mm": 0.248183,
+      "sagitta_center_mm": 0.109957,
+      "M_mm": 0.134957,
+      "x_keepout_mm": 0.036263,
+      "x_keepout_raw_mm": 0.036263,
+      "x_keepout_max_mm": 0.105246,
+      "alpha_deg": -83.087991
+    },
+    {
+      "ring": 3,
+      "col": 7,
+      "x_left_mm": 4.948008,
+      "x_right_mm": 5.654867,
+      "y_top_edge_mm": 2.948302,
+      "y_bottom_edge_mm": 3.840269,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          4.984625,
+          2.812937
+        ],
+        [
+          5.232906,
+          2.812937
+        ]
+      ],
+      "right_cl": [
+        [
+          5.369969,
+          3.975635
+        ],
+        [
+          5.61825,
+          3.975635
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.553578,
+      "delta_deg": 83.276789,
+      "chord_center_len_mm": 0.248281,
+      "sagitta_center_mm": 0.110366,
+      "M_mm": 0.135366,
+      "x_keepout_mm": 0.036617,
+      "x_keepout_raw_mm": 0.036617,
+      "x_keepout_max_mm": 0.105148,
+      "alpha_deg": 83.276789
+    },
+    {
+      "ring": 4,
+      "col": 0,
+      "x_left_mm": 0.0,
+      "x_right_mm": 0.706858,
+      "y_top_edge_mm": 4.276755,
+      "y_bottom_edge_mm": 5.143404,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          0.036239,
+          4.141825
+        ],
+        [
+          0.284416,
+          4.141825
+        ]
+      ],
+      "right_cl": [
+        [
+          0.422442,
+          5.278333
+        ],
+        [
+          0.670619,
+          5.278333
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.150908,
+      "delta_deg": 83.075454,
+      "chord_center_len_mm": 0.248176,
+      "sagitta_center_mm": 0.10993,
+      "M_mm": 0.13493,
+      "x_keepout_mm": 0.036239,
+      "x_keepout_raw_mm": 0.036239,
+      "x_keepout_max_mm": 0.105253,
+      "alpha_deg": 83.075454
+    },
+    {
+      "ring": 4,
+      "col": 1,
+      "x_left_mm": 0.706858,
+      "x_right_mm": 1.413717,
+      "y_top_edge_mm": 4.270791,
+      "y_bottom_edge_mm": 5.159686,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          0.74343,
+          5.295
+        ],
+        [
+          0.991699,
+          5.295
+        ]
+      ],
+      "right_cl": [
+        [
+          1.128876,
+          4.135476
+        ],
+        [
+          1.377145,
+          4.135476
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.505995,
+      "delta_deg": 83.252997,
+      "chord_center_len_mm": 0.248269,
+      "sagitta_center_mm": 0.110314,
+      "M_mm": 0.135314,
+      "x_keepout_mm": 0.036572,
+      "x_keepout_raw_mm": 0.036572,
+      "x_keepout_max_mm": 0.105161,
+      "alpha_deg": -83.252997
+    },
+    {
+      "ring": 4,
+      "col": 2,
+      "x_left_mm": 1.413717,
+      "x_right_mm": 2.120575,
+      "y_top_edge_mm": 4.271862,
+      "y_bottom_edge_mm": 5.140043,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          1.449979,
+          4.136905
+        ],
+        [
+          1.698163,
+          4.136905
+        ]
+      ],
+      "right_cl": [
+        [
+          1.836129,
+          5.275
+        ],
+        [
+          2.084312,
+          5.275
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.175982,
+      "delta_deg": 83.087991,
+      "chord_center_len_mm": 0.248183,
+      "sagitta_center_mm": 0.109957,
+      "M_mm": 0.134957,
+      "x_keepout_mm": 0.036263,
+      "x_keepout_raw_mm": 0.036263,
+      "x_keepout_max_mm": 0.105246,
+      "alpha_deg": 83.087991
+    },
+    {
+      "ring": 4,
+      "col": 3,
+      "x_left_mm": 2.120575,
+      "x_right_mm": 2.827433,
+      "y_top_edge_mm": 4.270791,
+      "y_bottom_edge_mm": 5.159686,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          2.157147,
+          5.295
+        ],
+        [
+          2.405416,
+          5.295
+        ]
+      ],
+      "right_cl": [
+        [
+          2.542593,
+          4.135476
+        ],
+        [
+          2.790861,
+          4.135476
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.505995,
+      "delta_deg": 83.252997,
+      "chord_center_len_mm": 0.248269,
+      "sagitta_center_mm": 0.110314,
+      "M_mm": 0.135314,
+      "x_keepout_mm": 0.036572,
+      "x_keepout_raw_mm": 0.036572,
+      "x_keepout_max_mm": 0.105161,
+      "alpha_deg": -83.252997
+    },
+    {
+      "ring": 4,
+      "col": 4,
+      "x_left_mm": 2.827433,
+      "x_right_mm": 3.534292,
+      "y_top_edge_mm": 4.276755,
+      "y_bottom_edge_mm": 5.143404,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          2.863673,
+          4.141825
+        ],
+        [
+          3.111849,
+          4.141825
+        ]
+      ],
+      "right_cl": [
+        [
+          3.249876,
+          5.278333
+        ],
+        [
+          3.498052,
+          5.278333
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.150908,
+      "delta_deg": 83.075454,
+      "chord_center_len_mm": 0.248176,
+      "sagitta_center_mm": 0.10993,
+      "M_mm": 0.13493,
+      "x_keepout_mm": 0.036239,
+      "x_keepout_raw_mm": 0.036239,
+      "x_keepout_max_mm": 0.105253,
+      "alpha_deg": 83.075454
+    },
+    {
+      "ring": 4,
+      "col": 5,
+      "x_left_mm": 3.534292,
+      "x_right_mm": 4.24115,
+      "y_top_edge_mm": 4.270791,
+      "y_bottom_edge_mm": 5.159686,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          3.570864,
+          5.295
+        ],
+        [
+          3.819132,
+          5.295
+        ]
+      ],
+      "right_cl": [
+        [
+          3.956309,
+          4.135476
+        ],
+        [
+          4.204578,
+          4.135476
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.505995,
+      "delta_deg": 83.252997,
+      "chord_center_len_mm": 0.248269,
+      "sagitta_center_mm": 0.110314,
+      "M_mm": 0.135314,
+      "x_keepout_mm": 0.036572,
+      "x_keepout_raw_mm": 0.036572,
+      "x_keepout_max_mm": 0.105161,
+      "alpha_deg": -83.252997
+    },
+    {
+      "ring": 4,
+      "col": 6,
+      "x_left_mm": 4.24115,
+      "x_right_mm": 4.948008,
+      "y_top_edge_mm": 4.271862,
+      "y_bottom_edge_mm": 5.140043,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          4.277413,
+          4.136905
+        ],
+        [
+          4.525596,
+          4.136905
+        ]
+      ],
+      "right_cl": [
+        [
+          4.663563,
+          5.275
+        ],
+        [
+          4.911746,
+          5.275
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.175982,
+      "delta_deg": 83.087991,
+      "chord_center_len_mm": 0.248183,
+      "sagitta_center_mm": 0.109957,
+      "M_mm": 0.134957,
+      "x_keepout_mm": 0.036263,
+      "x_keepout_raw_mm": 0.036263,
+      "x_keepout_max_mm": 0.105246,
+      "alpha_deg": 83.087991
+    },
+    {
+      "ring": 4,
+      "col": 7,
+      "x_left_mm": 4.948008,
+      "x_right_mm": 5.654867,
+      "y_top_edge_mm": 4.271001,
+      "y_bottom_edge_mm": 5.162967,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          4.984625,
+          5.298333
+        ],
+        [
+          5.232906,
+          5.298333
+        ]
+      ],
+      "right_cl": [
+        [
+          5.369969,
+          4.135635
+        ],
+        [
+          5.61825,
+          4.135635
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.553578,
+      "delta_deg": 83.276789,
+      "chord_center_len_mm": 0.248281,
+      "sagitta_center_mm": 0.110366,
+      "M_mm": 0.135366,
+      "x_keepout_mm": 0.036617,
+      "x_keepout_raw_mm": 0.036617,
+      "x_keepout_max_mm": 0.105148,
+      "alpha_deg": -83.276789
+    },
+    {
+      "ring": 5,
+      "col": 0,
+      "x_left_mm": 0.0,
+      "x_right_mm": 0.706858,
+      "y_top_edge_mm": 5.573263,
+      "y_bottom_edge_mm": 6.439912,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          0.036239,
+          6.574841
+        ],
+        [
+          0.284416,
+          6.574841
+        ]
+      ],
+      "right_cl": [
+        [
+          0.422442,
+          5.438333
+        ],
+        [
+          0.670619,
+          5.438333
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.150908,
+      "delta_deg": 83.075454,
+      "chord_center_len_mm": 0.248176,
+      "sagitta_center_mm": 0.10993,
+      "M_mm": 0.13493,
+      "x_keepout_mm": 0.036239,
+      "x_keepout_raw_mm": 0.036239,
+      "x_keepout_max_mm": 0.105253,
+      "alpha_deg": -83.075454
+    },
+    {
+      "ring": 5,
+      "col": 1,
+      "x_left_mm": 0.706858,
+      "x_right_mm": 1.413717,
+      "y_top_edge_mm": 5.600314,
+      "y_bottom_edge_mm": 6.489209,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          0.74343,
+          5.465
+        ],
+        [
+          0.991699,
+          5.465
+        ]
+      ],
+      "right_cl": [
+        [
+          1.128876,
+          6.624524
+        ],
+        [
+          1.377145,
+          6.624524
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.505995,
+      "delta_deg": 83.252997,
+      "chord_center_len_mm": 0.248269,
+      "sagitta_center_mm": 0.110314,
+      "M_mm": 0.135314,
+      "x_keepout_mm": 0.036572,
+      "x_keepout_raw_mm": 0.036572,
+      "x_keepout_max_mm": 0.105161,
+      "alpha_deg": 83.252997
+    },
+    {
+      "ring": 5,
+      "col": 2,
+      "x_left_mm": 1.413717,
+      "x_right_mm": 2.120575,
+      "y_top_edge_mm": 5.569957,
+      "y_bottom_edge_mm": 6.438138,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          1.449979,
+          6.573095
+        ],
+        [
+          1.698163,
+          6.573095
+        ]
+      ],
+      "right_cl": [
+        [
+          1.836129,
+          5.435
+        ],
+        [
+          2.084312,
+          5.435
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.175982,
+      "delta_deg": 83.087991,
+      "chord_center_len_mm": 0.248183,
+      "sagitta_center_mm": 0.109957,
+      "M_mm": 0.134957,
+      "x_keepout_mm": 0.036263,
+      "x_keepout_raw_mm": 0.036263,
+      "x_keepout_max_mm": 0.105246,
+      "alpha_deg": -83.087991
+    },
+    {
+      "ring": 5,
+      "col": 3,
+      "x_left_mm": 2.120575,
+      "x_right_mm": 2.827433,
+      "y_top_edge_mm": 5.600314,
+      "y_bottom_edge_mm": 6.489209,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          2.157147,
+          5.465
+        ],
+        [
+          2.405416,
+          5.465
+        ]
+      ],
+      "right_cl": [
+        [
+          2.542593,
+          6.624524
+        ],
+        [
+          2.790861,
+          6.624524
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.505995,
+      "delta_deg": 83.252997,
+      "chord_center_len_mm": 0.248269,
+      "sagitta_center_mm": 0.110314,
+      "M_mm": 0.135314,
+      "x_keepout_mm": 0.036572,
+      "x_keepout_raw_mm": 0.036572,
+      "x_keepout_max_mm": 0.105161,
+      "alpha_deg": 83.252997
+    },
+    {
+      "ring": 5,
+      "col": 4,
+      "x_left_mm": 2.827433,
+      "x_right_mm": 3.534292,
+      "y_top_edge_mm": 5.573263,
+      "y_bottom_edge_mm": 6.439912,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          2.863673,
+          6.574841
+        ],
+        [
+          3.111849,
+          6.574841
+        ]
+      ],
+      "right_cl": [
+        [
+          3.249876,
+          5.438333
+        ],
+        [
+          3.498052,
+          5.438333
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.150908,
+      "delta_deg": 83.075454,
+      "chord_center_len_mm": 0.248176,
+      "sagitta_center_mm": 0.10993,
+      "M_mm": 0.13493,
+      "x_keepout_mm": 0.036239,
+      "x_keepout_raw_mm": 0.036239,
+      "x_keepout_max_mm": 0.105253,
+      "alpha_deg": -83.075454
+    },
+    {
+      "ring": 5,
+      "col": 5,
+      "x_left_mm": 3.534292,
+      "x_right_mm": 4.24115,
+      "y_top_edge_mm": 5.600314,
+      "y_bottom_edge_mm": 6.489209,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          3.570864,
+          5.465
+        ],
+        [
+          3.819132,
+          5.465
+        ]
+      ],
+      "right_cl": [
+        [
+          3.956309,
+          6.624524
+        ],
+        [
+          4.204578,
+          6.624524
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.505995,
+      "delta_deg": 83.252997,
+      "chord_center_len_mm": 0.248269,
+      "sagitta_center_mm": 0.110314,
+      "M_mm": 0.135314,
+      "x_keepout_mm": 0.036572,
+      "x_keepout_raw_mm": 0.036572,
+      "x_keepout_max_mm": 0.105161,
+      "alpha_deg": 83.252997
+    },
+    {
+      "ring": 5,
+      "col": 6,
+      "x_left_mm": 4.24115,
+      "x_right_mm": 4.948008,
+      "y_top_edge_mm": 5.569957,
+      "y_bottom_edge_mm": 6.438138,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          4.277413,
+          6.573095
+        ],
+        [
+          4.525596,
+          6.573095
+        ]
+      ],
+      "right_cl": [
+        [
+          4.663563,
+          5.435
+        ],
+        [
+          4.911746,
+          5.435
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.175982,
+      "delta_deg": 83.087991,
+      "chord_center_len_mm": 0.248183,
+      "sagitta_center_mm": 0.109957,
+      "M_mm": 0.134957,
+      "x_keepout_mm": 0.036263,
+      "x_keepout_raw_mm": 0.036263,
+      "x_keepout_max_mm": 0.105246,
+      "alpha_deg": -83.087991
+    },
+    {
+      "ring": 5,
+      "col": 7,
+      "x_left_mm": 4.948008,
+      "x_right_mm": 5.654867,
+      "y_top_edge_mm": 5.593699,
+      "y_bottom_edge_mm": 6.485666,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          4.984625,
+          5.458333
+        ],
+        [
+          5.232906,
+          5.458333
+        ]
+      ],
+      "right_cl": [
+        [
+          5.369969,
+          6.621032
+        ],
+        [
+          5.61825,
+          6.621032
+        ]
+      ],
+      "Rc_mm": 0.125,
+      "theta_deg": 166.553578,
+      "delta_deg": 83.276789,
+      "chord_center_len_mm": 0.248281,
+      "sagitta_center_mm": 0.110366,
+      "M_mm": 0.135366,
+      "x_keepout_mm": 0.036617,
+      "x_keepout_raw_mm": 0.036617,
+      "x_keepout_max_mm": 0.105148,
+      "alpha_deg": 83.276789
+    },
+    {
+      "ring": 6,
+      "col": 0,
+      "x_left_mm": 0.0,
+      "x_right_mm": 0.706858,
+      "y_top_edge_mm": 6.920943,
+      "y_bottom_edge_mm": 7.828898,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          0.016811,
+          6.749841
+        ],
+        [
+          0.316282,
+          6.749841
+        ]
+      ],
+      "right_cl": [
+        [
+          0.390576,
+          8.0
+        ],
+        [
+          0.690048,
+          8.0
+        ]
+      ],
+      "Rc_mm": 0.15,
+      "theta_deg": 173.198111,
+      "delta_deg": 86.599056,
+      "chord_center_len_mm": 0.299472,
+      "sagitta_center_mm": 0.141102,
+      "M_mm": 0.171102,
+      "x_keepout_mm": 0.016811,
+      "x_keepout_raw_mm": 0.016811,
+      "x_keepout_max_mm": 0.053958,
+      "alpha_deg": 86.599056
+    },
+    {
+      "ring": 6,
+      "col": 1,
+      "x_left_mm": 0.706858,
+      "x_right_mm": 1.413717,
+      "y_top_edge_mm": 6.895866,
+      "y_bottom_edge_mm": 7.828658,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          0.723917,
+          8.0
+        ],
+        [
+          1.023417,
+          8.0
+        ]
+      ],
+      "right_cl": [
+        [
+          1.097158,
+          6.724524
+        ],
+        [
+          1.396658,
+          6.724524
+        ]
+      ],
+      "Rc_mm": 0.15,
+      "theta_deg": 173.382262,
+      "delta_deg": 86.691131,
+      "chord_center_len_mm": 0.2995,
+      "sagitta_center_mm": 0.141342,
+      "M_mm": 0.171342,
+      "x_keepout_mm": 0.017059,
+      "x_keepout_raw_mm": 0.017059,
+      "x_keepout_max_mm": 0.053929,
+      "alpha_deg": -86.691131
+    },
+    {
+      "ring": 6,
+      "col": 2,
+      "x_left_mm": 1.413717,
+      "x_right_mm": 2.120575,
+      "y_top_edge_mm": 6.919214,
+      "y_bottom_edge_mm": 7.828881,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          1.430545,
+          6.748095
+        ],
+        [
+          1.730018,
+          6.748095
+        ]
+      ],
+      "right_cl": [
+        [
+          1.804273,
+          8.0
+        ],
+        [
+          2.103747,
+          8.0
+        ]
+      ],
+      "Rc_mm": 0.15,
+      "theta_deg": 173.211136,
+      "delta_deg": 86.605568,
+      "chord_center_len_mm": 0.299474,
+      "sagitta_center_mm": 0.141119,
+      "M_mm": 0.171119,
+      "x_keepout_mm": 0.016828,
+      "x_keepout_raw_mm": 0.016828,
+      "x_keepout_max_mm": 0.053955,
+      "alpha_deg": 86.605568
+    },
+    {
+      "ring": 6,
+      "col": 3,
+      "x_left_mm": 2.120575,
+      "x_right_mm": 2.827433,
+      "y_top_edge_mm": 6.895866,
+      "y_bottom_edge_mm": 7.828658,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          2.137634,
+          8.0
+        ],
+        [
+          2.437133,
+          8.0
+        ]
+      ],
+      "right_cl": [
+        [
+          2.510875,
+          6.724524
+        ],
+        [
+          2.810375,
+          6.724524
+        ]
+      ],
+      "Rc_mm": 0.15,
+      "theta_deg": 173.382262,
+      "delta_deg": 86.691131,
+      "chord_center_len_mm": 0.2995,
+      "sagitta_center_mm": 0.141342,
+      "M_mm": 0.171342,
+      "x_keepout_mm": 0.017059,
+      "x_keepout_raw_mm": 0.017059,
+      "x_keepout_max_mm": 0.053929,
+      "alpha_deg": -86.691131
+    },
+    {
+      "ring": 6,
+      "col": 4,
+      "x_left_mm": 2.827433,
+      "x_right_mm": 3.534292,
+      "y_top_edge_mm": 6.920943,
+      "y_bottom_edge_mm": 7.828898,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          2.844244,
+          6.749841
+        ],
+        [
+          3.143716,
+          6.749841
+        ]
+      ],
+      "right_cl": [
+        [
+          3.218009,
+          8.0
+        ],
+        [
+          3.517481,
+          8.0
+        ]
+      ],
+      "Rc_mm": 0.15,
+      "theta_deg": 173.198111,
+      "delta_deg": 86.599056,
+      "chord_center_len_mm": 0.299472,
+      "sagitta_center_mm": 0.141102,
+      "M_mm": 0.171102,
+      "x_keepout_mm": 0.016811,
+      "x_keepout_raw_mm": 0.016811,
+      "x_keepout_max_mm": 0.053958,
+      "alpha_deg": 86.599056
+    },
+    {
+      "ring": 6,
+      "col": 5,
+      "x_left_mm": 3.534292,
+      "x_right_mm": 4.24115,
+      "y_top_edge_mm": 6.895866,
+      "y_bottom_edge_mm": 7.828658,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          3.55135,
+          8.0
+        ],
+        [
+          3.85085,
+          8.0
+        ]
+      ],
+      "right_cl": [
+        [
+          3.924592,
+          6.724524
+        ],
+        [
+          4.224092,
+          6.724524
+        ]
+      ],
+      "Rc_mm": 0.15,
+      "theta_deg": 173.382262,
+      "delta_deg": 86.691131,
+      "chord_center_len_mm": 0.2995,
+      "sagitta_center_mm": 0.141342,
+      "M_mm": 0.171342,
+      "x_keepout_mm": 0.017059,
+      "x_keepout_raw_mm": 0.017059,
+      "x_keepout_max_mm": 0.053929,
+      "alpha_deg": -86.691131
+    },
+    {
+      "ring": 6,
+      "col": 6,
+      "x_left_mm": 4.24115,
+      "x_right_mm": 4.948008,
+      "y_top_edge_mm": 6.919214,
+      "y_bottom_edge_mm": 7.828881,
+      "left_crown_pos": "top",
+      "right_crown_pos": "bottom",
+      "left_cl": [
+        [
+          4.257978,
+          6.748095
+        ],
+        [
+          4.557452,
+          6.748095
+        ]
+      ],
+      "right_cl": [
+        [
+          4.631707,
+          8.0
+        ],
+        [
+          4.93118,
+          8.0
+        ]
+      ],
+      "Rc_mm": 0.15,
+      "theta_deg": 173.211136,
+      "delta_deg": 86.605568,
+      "chord_center_len_mm": 0.299474,
+      "sagitta_center_mm": 0.141119,
+      "M_mm": 0.171119,
+      "x_keepout_mm": 0.016828,
+      "x_keepout_raw_mm": 0.016828,
+      "x_keepout_max_mm": 0.053955,
+      "alpha_deg": 86.605568
+    },
+    {
+      "ring": 6,
+      "col": 7,
+      "x_left_mm": 4.948008,
+      "x_right_mm": 5.654867,
+      "y_top_edge_mm": 6.892406,
+      "y_bottom_edge_mm": 7.828626,
+      "left_crown_pos": "bottom",
+      "right_crown_pos": "top",
+      "left_cl": [
+        [
+          4.9651,
+          8.0
+        ],
+        [
+          5.264604,
+          8.0
+        ]
+      ],
+      "right_cl": [
+        [
+          5.338271,
+          6.721032
+        ],
+        [
+          5.637775,
+          6.721032
+        ]
+      ],
+      "Rc_mm": 0.15,
+      "theta_deg": 173.406891,
+      "delta_deg": 86.703445,
+      "chord_center_len_mm": 0.299504,
+      "sagitta_center_mm": 0.141374,
+      "M_mm": 0.171374,
+      "x_keepout_mm": 0.017092,
+      "x_keepout_raw_mm": 0.017092,
+      "x_keepout_max_mm": 0.053926,
+      "alpha_deg": -86.703445
+    }
+  ]
+}

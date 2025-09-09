@@ -690,9 +690,49 @@ def read_json_data(file_path):
         if 'parameters' in json_data:
             parameters = json_data['parameters']
 
-        # Extract wave_inputs_by_column data
-        if 'wave_inputs_by_column' in json_data:
+        # Check for new format with 'cells' data
+        if 'cells' in json_data:
+            data = json_data['cells']
+            print("DEBUG: Found new JSON format with 'cells' data")
+
+            # Convert to the expected format if needed
+            formatted_data = []
+            for row in data:
+                # Ensure all numeric values are properly typed
+                row_data = {}
+                for key, value in row.items():
+                    if value is None:
+                        # Handle null values
+                        if key in ['ring', 'col']:
+                            row_data[key] = 0
+                        else:
+                            row_data[key] = 0.0
+                    elif key in ['ring', 'col', 'linked_above', 'linked_below']:
+                        try:
+                            row_data[key] = int(
+                                value) if value is not None else 0
+                        except (ValueError, TypeError):
+                            row_data[key] = 0
+                    elif key in ['chord_top_centerline', 'chord_bottom_centerline', 'chord_top_outer', 'chord_bottom_outer']:
+                        # Keep chord coordinate arrays as-is
+                        row_data[key] = value
+                    else:
+                        try:
+                            row_data[key] = float(
+                                value) if value is not None else 0.0
+                        except (ValueError, TypeError):
+                            row_data[key] = 0.0
+                formatted_data.append(row_data)
+
+            # Return both data and parameters
+            return {
+                'data': formatted_data,
+                'parameters': parameters
+            }
+        # Extract wave_inputs_by_column data (old format)
+        elif 'wave_inputs_by_column' in json_data:
             data = json_data['wave_inputs_by_column']
+            print("DEBUG: Found old JSON format with 'wave_inputs_by_column' data")
 
             # Convert to the expected format if needed
             formatted_data = []
@@ -727,7 +767,7 @@ def read_json_data(file_path):
             }
         else:
             raise Exception(
-                "No 'wave_inputs_by_column' data found in JSON file")
+                "No 'cells' or 'wave_inputs_by_column' data found in JSON file")
 
     except Exception as e:
         futil.log(f'Error reading JSON file: {traceback.format_exc()}')
@@ -776,32 +816,65 @@ def process_excel_file(file_path, diameter_mm, length_mm=None, draw_construction
         first_ring_data = [row for row in data if row['ring'] == rings[0]]
         cols_per_ring = len(first_ring_data)
 
-        # Calculate total length from ring heights and gaps
+        # Calculate total length and ring positions from absolute Y positions
         total_length_mm = 0
         ring_positions = {}
-        current_y = 0
 
-        for ring_num in rings:
-            ring_data = [row for row in data if row['ring'] == ring_num]
-            ring_height = max(row['wave_height_mm'] for row in ring_data)
+        # Check if we have absolute Y position data
+        has_absolute_positions = any(
+            'y_top_border_mm' in row and 'y_bottom_border_mm' in row for row in data)
 
-            ring_positions[ring_num] = {
-                'center_y': current_y + ring_height / 2,
-                'start_y': current_y,
-                'end_y': current_y + ring_height,
-                'height': ring_height
-            }
+        if has_absolute_positions:
+            print("DEBUG: Using absolute Y positions from data")
+            # Use absolute Y positions from the data
+            for ring_num in rings:
+                ring_data = [row for row in data if row['ring'] == ring_num]
 
-            current_y += ring_height
+                # Get min top and max bottom for this ring
+                top_positions = [row['y_top_border_mm']
+                                 for row in ring_data if 'y_top_border_mm' in row]
+                bottom_positions = [row['y_bottom_border_mm']
+                                    for row in ring_data if 'y_bottom_border_mm' in row]
 
-            # Add gap after ring (except for last ring)
-            if ring_num < max(rings):
-                # Use gap_below from current ring data
-                gap_below = max(row.get('gap_below_mm', 0)
-                                for row in ring_data)
-                current_y += gap_below
+                if top_positions and bottom_positions:
+                    start_y = min(top_positions)
+                    end_y = max(bottom_positions)
+                    ring_height = end_y - start_y
 
-        total_length_mm = current_y
+                    ring_positions[ring_num] = {
+                        'center_y': start_y + ring_height / 2,
+                        'start_y': start_y,
+                        'end_y': end_y,
+                        'height': ring_height
+                    }
+
+                    # Update total length
+                    total_length_mm = max(total_length_mm, end_y)
+        else:
+            print("DEBUG: Calculating Y positions from wave heights and gaps")
+            # Fallback to calculated positions
+            current_y = 0
+            for ring_num in rings:
+                ring_data = [row for row in data if row['ring'] == ring_num]
+                ring_height = max(row['wave_height_mm'] for row in ring_data)
+
+                ring_positions[ring_num] = {
+                    'center_y': current_y + ring_height / 2,
+                    'start_y': current_y,
+                    'end_y': current_y + ring_height,
+                    'height': ring_height
+                }
+
+                current_y += ring_height
+
+                # Add gap after ring (except for last ring)
+                if ring_num < max(rings):
+                    # Use gap_below from current ring data
+                    gap_below = max(row.get('gap_below_mm', 0)
+                                    for row in ring_data)
+                    current_y += gap_below
+
+            total_length_mm = current_y
 
         # Use provided length if available, otherwise use calculated length
         if length_mm is not None:
@@ -889,7 +962,70 @@ def process_excel_file(file_path, diameter_mm, length_mm=None, draw_construction
                 ring_num = row['ring']
                 col_num = row['col']
 
-                if ring_num in ring_positions:
+                # Check if this row has crown chord coordinate data (new format)
+                if 'chord_top_centerline' in row and 'chord_bottom_centerline' in row:
+                    print(
+                        f"DEBUG: Drawing crown chords using coordinates for ring {ring_num}, col {col_num}")
+
+                    # Draw top crown chord using centerline coordinates
+                    chord_top = row.get('chord_top_centerline', [])
+                    if len(chord_top) >= 2:
+                        start_point = chord_top[0]  # [x, y]
+                        end_point = chord_top[1]    # [x, y]
+
+                        lines.addByTwoPoints(
+                            adsk.core.Point3D.create(
+                                mm_to_cm(start_point[0]), mm_to_cm(start_point[1]), 0),
+                            adsk.core.Point3D.create(
+                                mm_to_cm(end_point[0]), mm_to_cm(end_point[1]), 0)
+                        ).isConstruction = True
+
+                    # Draw bottom crown chord using centerline coordinates
+                    chord_bottom = row.get('chord_bottom_centerline', [])
+                    if len(chord_bottom) >= 2:
+                        start_point = chord_bottom[0]  # [x, y]
+                        end_point = chord_bottom[1]    # [x, y]
+
+                        lines.addByTwoPoints(
+                            adsk.core.Point3D.create(
+                                mm_to_cm(start_point[0]), mm_to_cm(start_point[1]), 0),
+                            adsk.core.Point3D.create(
+                                mm_to_cm(end_point[0]), mm_to_cm(end_point[1]), 0)
+                        ).isConstruction = True
+
+                    # Optionally draw outer edge chords for keep-out zones
+                    if 'chord_top_outer' in row and 'chord_bottom_outer' in row:
+                        # Draw top crown chord outer edge
+                        chord_top_outer = row.get('chord_top_outer', [])
+                        if len(chord_top_outer) >= 2:
+                            start_point = chord_top_outer[0]  # [x, y]
+                            end_point = chord_top_outer[1]    # [x, y]
+
+                            outer_line = lines.addByTwoPoints(
+                                adsk.core.Point3D.create(
+                                    mm_to_cm(start_point[0]), mm_to_cm(start_point[1]), 0),
+                                adsk.core.Point3D.create(
+                                    mm_to_cm(end_point[0]), mm_to_cm(end_point[1]), 0)
+                            )
+                            outer_line.isConstruction = True
+                            # Make outer edge lines a different style if possible
+
+                        # Draw bottom crown chord outer edge
+                        chord_bottom_outer = row.get('chord_bottom_outer', [])
+                        if len(chord_bottom_outer) >= 2:
+                            start_point = chord_bottom_outer[0]  # [x, y]
+                            end_point = chord_bottom_outer[1]    # [x, y]
+
+                            outer_line = lines.addByTwoPoints(
+                                adsk.core.Point3D.create(
+                                    mm_to_cm(start_point[0]), mm_to_cm(start_point[1]), 0),
+                                adsk.core.Point3D.create(
+                                    mm_to_cm(end_point[0]), mm_to_cm(end_point[1]), 0)
+                            )
+                            outer_line.isConstruction = True
+
+                # Fallback to old method if no crown chord coordinates available
+                elif ring_num in ring_positions:
                     ring_info = ring_positions[ring_num]
 
                     # Calculate column center position
@@ -927,6 +1063,57 @@ def process_excel_file(file_path, diameter_mm, length_mm=None, draw_construction
                                 mm_to_cm(col_center_x + chord_half_length), mm_to_cm(chord_y), 0)
                         ).isConstruction = True
 
+        # Draw individual cell frames using absolute Y positions
+        if has_absolute_positions and draw_construction:
+            print("DEBUG: Drawing individual cell frames using absolute Y positions")
+            col_spacing = width_mm / cols_per_ring
+
+            for row in data:
+                ring_num = row['ring']
+                col_num = row['col']
+
+                # Check if this row has absolute position data
+                if 'y_top_border_mm' in row and 'y_bottom_border_mm' in row:
+                    y_top = row['y_top_border_mm']
+                    y_bottom = row['y_bottom_border_mm']
+
+                    # Calculate column boundaries
+                    x_left = col_num * col_spacing
+                    x_right = (col_num + 1) * col_spacing
+
+                    # Draw cell frame rectangle (construction lines)
+                    # Top border of cell
+                    lines.addByTwoPoints(
+                        adsk.core.Point3D.create(
+                            mm_to_cm(x_left), mm_to_cm(y_top), 0),
+                        adsk.core.Point3D.create(
+                            mm_to_cm(x_right), mm_to_cm(y_top), 0)
+                    ).isConstruction = True
+
+                    # Bottom border of cell
+                    lines.addByTwoPoints(
+                        adsk.core.Point3D.create(
+                            mm_to_cm(x_left), mm_to_cm(y_bottom), 0),
+                        adsk.core.Point3D.create(
+                            mm_to_cm(x_right), mm_to_cm(y_bottom), 0)
+                    ).isConstruction = True
+
+                    # Left border of cell
+                    lines.addByTwoPoints(
+                        adsk.core.Point3D.create(
+                            mm_to_cm(x_left), mm_to_cm(y_top), 0),
+                        adsk.core.Point3D.create(
+                            mm_to_cm(x_left), mm_to_cm(y_bottom), 0)
+                    ).isConstruction = True
+
+                    # Right border of cell
+                    lines.addByTwoPoints(
+                        adsk.core.Point3D.create(
+                            mm_to_cm(x_right), mm_to_cm(y_top), 0),
+                        adsk.core.Point3D.create(
+                            mm_to_cm(x_right), mm_to_cm(y_bottom), 0)
+                    ).isConstruction = True
+
         # Create points at intersections if requested
         if create_points:
             col_spacing = width_mm / cols_per_ring
@@ -944,6 +1131,12 @@ def process_excel_file(file_path, diameter_mm, length_mm=None, draw_construction
         # Show summary
         rings_count = len(rings)
         data_points = len(data)
+        positioning_method = "Absolute Y positions" if has_absolute_positions else "Calculated positions"
+        cell_frames_drawn = has_absolute_positions and draw_construction
+
+        # Check if crown chord coordinates are available
+        has_crown_chords = any('chord_top_centerline' in row for row in data)
+        chord_method = "Crown chord coordinates" if has_crown_chords else "Calculated sagitta positions"
 
         ui.messageBox(
             f'Stent frame created from Excel data!\n\n'
@@ -954,8 +1147,11 @@ def process_excel_file(file_path, diameter_mm, length_mm=None, draw_construction
             f'• Calculated diameter: {diameter_mm:.2f} mm\n'
             f'• Calculated length: {total_length_mm:.2f} mm\n'
             f'• Width (circumference): {width_mm:.2f} mm\n'
+            f'• Positioning method: {positioning_method}\n'
             f'• Construction lines: {"Yes" if draw_construction else "No"}\n'
             f'• Chord lines: {"Yes" if draw_chords else "No"}\n'
+            f'• Chord method: {chord_method}\n'
+            f'• Individual cell frames: {"Yes" if cell_frames_drawn else "No"}\n'
             f'• Sketch points: {"Yes" if create_points else "No"}'
         )
 

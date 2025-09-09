@@ -1,0 +1,110 @@
+{
+  "meta": {
+    "generated_at": "2025-09-07T17:01:33",
+    "units": "mm (angles in degrees)",
+    "note": "Minimal spec: PARAMETERS + LINK MATRIX + GAP POLICY. Use derive_from_linkmatrix.py to compute full geometry."
+  },
+  "parameters": {
+    "diameter_mm": 1.8,
+    "length_mm": 8.0,
+    "num_rings": 6,
+    "crowns_per_ring": 8,
+    "height_factors": [
+      1.2,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.1
+    ],
+    "strut_width_mm_by_ring": [
+      0.06,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.06
+    ],
+    "R_factor": 2.5,
+    "angle_per_crown_deg": 45.0,
+    "x_keepout_min_mm": 0.01
+  },
+  "gaps_policy": {
+    "body_unlinked_mm": 0.16,
+    "body_linked_mm": 0.17,
+    "end_linked_mm": 0.175,
+    "end_unlinked_prox_mm": 0.095,
+    "end_unlinked_dist_mm": 0.1
+  },
+  "links": {
+    "interfaces": [
+      "1-2",
+      "2-3",
+      "3-4",
+      "4-5",
+      "5-6"
+    ],
+    "matrix_cols": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "matrix": [
+      [
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0
+      ]
+    ]
+  }
+}
